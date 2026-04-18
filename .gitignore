@@ -12,3 +12,8 @@ dist/
 # Verifier artifacts (report.json, etc.) are produced by `verifier
 # analyze` on demand; they're CI-only outputs, not source.
 /.verifier/
+# Clarion drift reports — per-run artifacts regenerated every time
+# `clarion drift` is invoked; CI uploads them on failure and nothing
+# else consumes them.
+/docs/drift-report.json
+/docs/drift-report.md
