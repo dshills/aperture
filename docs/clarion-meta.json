@@ -1,0 +1,86 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-04-18T11:28:22.939076Z",
+  "project": {
+    "name": "aperture",
+    "root_path": "/Users/dshills/Development/projects/aperture",
+    "languages": [
+      "Go",
+      "Shell"
+    ],
+    "go_module": "github.com/dshills/aperture"
+  },
+  "components": [
+    {
+      "name": "apbench",
+      "description": "Binary entrypoint (package main)",
+      "source_files": [
+        "cmd/apbench/main.go"
+      ],
+      "line_ranges": [
+        {
+          "start": 10,
+          "end": 10
+        }
+      ],
+      "confidence_score": 0.9,
+      "inferred": false
+    },
+    {
+      "name": "apbenchfixtures",
+      "description": "Binary entrypoint (package main)",
+      "source_files": [
+        "cmd/apbenchfixtures/main.go"
+      ],
+      "line_ranges": [
+        {
+          "start": 14,
+          "end": 14
+        }
+      ],
+      "confidence_score": 0.9,
+      "inferred": false
+    },
+    {
+      "name": "aperture",
+      "description": "Binary entrypoint (package main)",
+      "source_files": [
+        "cmd/aperture/main.go"
+      ],
+      "line_ranges": [
+        {
+          "start": 2,
+          "end": 2
+        }
+      ],
+      "confidence_score": 0.9,
+      "inferred": false
+    },
+    {
+      "name": "app",
+      "description": "Binary entrypoint (package main)",
+      "source_files": [
+        "testdata/fixtures/small_go/cmd/app/main.go"
+      ],
+      "line_ranges": [
+        {
+          "start": 2,
+          "end": 2
+        }
+      ],
+      "confidence_score": 0.9,
+      "inferred": false
+    }
+  ],
+  "apis": [],
+  "datastores": [],
+  "jobs": [],
+  "integrations": [],
+  "config": [],
+  "security": {
+    "source_files": null,
+    "line_ranges": null,
+    "confidence_score": 0,
+    "inferred": false
+  }
+}

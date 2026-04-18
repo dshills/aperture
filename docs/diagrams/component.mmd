@@ -1,0 +1,42 @@
+graph TD
+    subgraph CLI_Layer [CLI Entrypoints]
+        A[aperture CLI]
+        B[apbench]
+        C[apbenchfixtures]
+    end
+
+    subgraph Core_Engine [Internal Logic]
+        D[Task Parser]
+        E[Repo Indexer]
+        F[Relevance Scorer]
+        G[Budgeting Engine]
+        H[Gap Detector]
+    end
+
+    subgraph Storage [Persistence]
+        I[.aperture/cache]
+        J[.aperture/manifests]
+    end
+
+    subgraph External [External Integrations]
+        K[Claude CLI]
+        L[Codex CLI]
+        M[Custom Adapters]
+    end
+
+    %% Flow
+    A --> D
+    A --> E
+    E --> I
+    D --> F
+    E --> F
+    F --> G
+    G --> H
+    H --> J
+    
+    A -- run command --> K
+    A -- run command --> L
+    A -- run command --> M
+
+    B --> E
+    C --> E

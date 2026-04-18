@@ -1,0 +1,19 @@
+erDiagram
+    PROJECT ||--o{ COMPONENT : defines
+    PROJECT {
+        string name
+        string root_path
+        string go_module
+    }
+    COMPONENT {
+        string name
+        string description
+        string source_files
+        float confidence_score
+    }
+    
+    COMPONENT ||--o{ LINE_RANGE : contains
+    LINE_RANGE {
+        int start
+        int end
+    }

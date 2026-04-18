@@ -1,0 +1,57 @@
+name: docs drift
+
+# Run clarion drift on every PR and on pushes to main so a code change
+# that walks away from the committed docs fails CI. Drift is a pure
+# AST-scan compare against docs/clarion-meta.json — no LLM call, no
+# API key, no network beyond the clarion install itself.
+#
+# Regeneration (the `clarion pack` step) is deliberately NOT wired here
+# because it costs tokens and needs a provider secret. When drift
+# fails, regenerate locally with:
+#
+#   clarion pack enterprise --spec specs/initial/SPEC.md \
+#     --plan specs/initial/PLAN.md --output docs/
+#   clarion verify --spec specs/initial/SPEC.md \
+#     --plan specs/initial/PLAN.md --output docs/
+#
+# and commit the refreshed docs/.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: true
+
+      - name: Install clarion
+        run: go install github.com/dshills/clarion/cmd/clarion@latest
+
+      - name: Run docs drift check
+        run: |
+          clarion drift \
+            --spec specs/initial/SPEC.md \
+            --plan specs/initial/PLAN.md \
+            --output docs/ \
+            --drift-threshold 0.20
+
+      - name: Upload drift report (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clarion-drift-report
+          path: |
+            docs/drift-report.json
+            docs/drift-report.md
+          if-no-files-found: ignore
