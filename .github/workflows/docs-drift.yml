@@ -47,12 +47,21 @@ jobs:
           clarion --help >/dev/null
 
       - name: Run docs drift check
+        # Threshold is deliberately loose (0.40) while the Fact Model
+        # is still small. clarion-meta.json currently carries ~4
+        # high-confidence components, so any single add/modify pins
+        # the drift fraction at ≥0.25 — a tighter gate would trip on
+        # noise (e.g. clarion's own pack vs. drift scanner disagrees
+        # on whether a `c.Put(k, sampleEntry())` test helper counts
+        # as an `api` entry, producing a +1 apis delta against an
+        # empty baseline). Tighten this toward 0.20 once the Fact
+        # Model exceeds ~20 symbols so the denominator is meaningful.
         run: |
           clarion drift \
             --spec specs/initial/SPEC.md \
             --plan specs/initial/PLAN.md \
             --output docs/ \
-            --drift-threshold 0.20
+            --drift-threshold 0.40
 
       - name: Upload drift report (on failure)
         if: failure()

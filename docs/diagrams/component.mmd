@@ -1,42 +1,43 @@
 graph TD
-    subgraph CLI_Layer [CLI Entrypoints]
+    subgraph CLI_Layer [CLI Layer]
         A[aperture CLI]
         B[apbench]
         C[apbenchfixtures]
     end
 
-    subgraph Core_Engine [Internal Logic]
+    subgraph Core_Engine [Core Planning Engine]
         D[Task Parser]
-        E[Repo Indexer]
-        F[Relevance Scorer]
-        G[Budgeting Engine]
-        H[Gap Detector]
+        E[Repo Scanner]
+        F[Go AST Analyzer]
+        G[Relevance Scorer]
+        H[Budget Optimizer]
     end
 
-    subgraph Storage [Persistence]
-        I[.aperture/cache]
-        J[.aperture/manifests]
+    subgraph Output [Output Artifacts]
+        I[JSON Manifest]
+        J[Markdown Manifest]
+        K[Analysis Cache]
     end
 
-    subgraph External [External Integrations]
-        K[Claude CLI]
-        L[Codex CLI]
-        M[Custom Adapters]
+    subgraph External [External Agents]
+        L[Claude CLI]
+        M[Codex CLI]
     end
 
-    %% Flow
+    %% Relationships
     A --> D
     A --> E
-    E --> I
-    D --> F
     E --> F
-    F --> G
+    D & F --> G
     G --> H
+    H --> I
     H --> J
+    E --> K
     
-    A -- run command --> K
-    A -- run command --> L
-    A -- run command --> M
+    A -- "aperture run" --> L
+    A -- "aperture run" --> M
+    I -.-> L
+    I -.-> M
 
     B --> E
     C --> E

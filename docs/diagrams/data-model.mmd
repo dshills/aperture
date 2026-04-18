@@ -1,19 +1,19 @@
 erDiagram
-    PROJECT ||--o{ COMPONENT : defines
+    PROJECT ||--o{ COMPONENT : contains
+    COMPONENT ||--o{ DATASTORE : "interacts with (None Detected)"
+
     PROJECT {
-        string name
-        string root_path
-        string go_module
+        string name "aperture"
+        string root_path "/Users/dshills/Development/projects/aperture"
+        string go_module "github.com/dshills/aperture"
     }
+
     COMPONENT {
         string name
         string description
         string source_files
-        float confidence_score
     }
-    
-    COMPONENT ||--o{ LINE_RANGE : contains
-    LINE_RANGE {
-        int start
-        int end
+
+    DATASTORE {
+        string status "UNKNOWN/NONE"
     }

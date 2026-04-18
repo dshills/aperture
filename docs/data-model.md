@@ -1,77 +1,79 @@
-# Data Model Documentation: aperture
+# Aperture Data Model Documentation
 
-This document outlines the data architecture and storage components for the **aperture** project, as derived from the system analysis.
+This document outlines the data model and persistence layer for the **aperture** project, as derived from the automated fact model analysis.
 
 ## 1. Metadata
 - **Project Name:** aperture
 - **Schema Version:** 1.0
-- **Generated At:** 2026-04-18T11:28:22.939076Z
-- **Go Module:** `github.com/dshills/aperture`
+- **Generated At:** 2026-04-18T11:42:40.00817Z
+- **Root Path:** `/Users/dshills/Development/projects/aperture`
 - **Primary Languages:** Go, Shell
+- **Go Module:** `github.com/dshills/aperture`
 
 ---
 
-## 2. Datastores and Inferred Schemas
+## 2. Datastore Overview
+Based on the provided fact model, no external datastores (SQL, NoSQL, or Caches) were explicitly detected within the analyzed source code.
 
-Based on the provided fact model, no explicit datastores (SQL, NoSQL, or Caches) were detected within the analyzed source code.
+| Datastore Name | Type | Description |
+| :--- | :--- | :--- |
+| **UNKNOWN** | **UNKNOWN** | No datastores detected in current analysis. |
 
-| Datastore Name | Type | Description | Inferred Schema |
+---
+
+## 3. Inferred Schemas
+As no datastores were detected, there are no inferred schemas to report at this time.
+
+### Entity: UNKNOWN
+| Field | Type | PII | Description |
 | :--- | :--- | :--- | :--- |
-| **UNKNOWN** | **UNKNOWN** | No datastores detected in current analysis. | **UNKNOWN** |
+| **UNKNOWN** | **UNKNOWN** | **UNKNOWN** | **UNKNOWN** |
 
 ---
 
-## 3. PII Assessment
-No fields containing Personally Identifiable Information (PII) were flagged in this analysis.
+## 4. PII Assessment
+No fields containing Personally Identifiable Information (PII) were identified in the current fact model.
 
 > [!NOTE]
-> Security confidence score: 0. No security-related source files or line ranges were identified for data handling.
+> If future scans detect user-related data, fields will be marked with ⚠️ **PII** warnings here.
 
 ---
 
-## 4. Entity-Relationship Diagram
-
-The following diagram represents the relationship between the project and its identified functional components. Since no database entities were detected, this diagram reflects the structural components of the application.
+## 5. Entity Relationship Diagram
+The following diagram represents the relationship between the detected components and the (currently empty) data layer.
 
 ```mermaid
 erDiagram
-    PROJECT ||--o{ COMPONENT : defines
+    PROJECT ||--o{ COMPONENT : contains
+    COMPONENT ||--o{ DATASTORE : "interacts with (None Detected)"
+
     PROJECT {
-        string name
-        string root_path
-        string go_module
+        string name "aperture"
+        string root_path "/Users/dshills/Development/projects/aperture"
+        string go_module "github.com/dshills/aperture"
     }
+
     COMPONENT {
         string name
         string description
         string source_files
-        float confidence_score
     }
-    
-    COMPONENT ||--o{ LINE_RANGE : contains
-    LINE_RANGE {
-        int start
-        int end
+
+    DATASTORE {
+        string status "UNKNOWN/NONE"
     }
 ```
 
 ---
 
-## 5. Components Overview
+## 6. Detected Components
+The following binary entry points (package main) were identified, which may serve as the primary consumers of data:
 
-The project consists of several binary entry points (package main). While these components do not currently define a data schema, they represent the execution context for the application logic.
-
-| Component | Description | Source Entry Point |
-| :--- | :--- | :--- |
-| **apbench** | Binary entrypoint (package main) | `cmd/apbench/main.go` |
-| **apbenchfixtures** | Binary entrypoint (package main) | `cmd/apbenchfixtures/main.go` |
-| **aperture** | Binary entrypoint (package main) | `cmd/aperture/main.go` |
-| **app** | Binary entrypoint (package main) | `testdata/fixtures/small_go/cmd/app/main.go` |
-
----
-
-## 6. External Integrations & Jobs
-- **APIs:** None detected (UNKNOWN)
-- **Jobs:** None detected (UNKNOWN)
-- **Integrations:** None detected (UNKNOWN)
-- **Configuration:** None detected (UNKNOWN)
+1.  **apbench**: Binary entrypoint (package main)
+    *   Source: `cmd/apbench/main.go`
+2.  **apbenchfixtures**: Binary entrypoint (package main)
+    *   Source: `cmd/apbenchfixtures/main.go`
+3.  **aperture**: Binary entrypoint (package main)
+    *   Source: `cmd/aperture/main.go`
+4.  **app**: Binary entrypoint (package main)
+    *   Source: `testdata/fixtures/small_go/cmd/app/main.go`

@@ -2,10 +2,10 @@
 
 ## API Endpoints
 
-No API endpoints are defined in the current project specification.
+No API endpoints were identified in the provided project specification.
 
 | Method | Route | Handler | Auth Pattern |
 | :--- | :--- | :--- | :--- |
 | - | - | - | - |
 
-*Note: The current fact model (version 1.0) for the `aperture` project does not contain any entries in the `apis` field.*
+*Note: The current fact model for the `aperture` project does not contain any defined API components.*
