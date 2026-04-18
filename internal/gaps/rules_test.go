@@ -218,21 +218,31 @@ func TestRule_OversizedPrimary_FiresOnDemotion(t *testing.T) {
 	}
 }
 
-func TestRule_TaskUnderspecified_FiresOnFewAnchors(t *testing.T) {
+func TestRule_TaskUnderspecified_FiresWhenMaxScoreBelowThreshold(t *testing.T) {
 	in := mkInputs()
-	in.Task.Anchors = []string{"only"}
-	got := taskUnderspecified(in)
-	if len(got) != 1 {
-		t.Fatalf("should fire with <2 anchors: %+v", got)
+	in.Assignments = []selection.Assignment{{Path: "pkg/foo.go", Score: 0.45, LoadMode: manifest.LoadModeFull}}
+	if got := taskUnderspecified(in); len(got) != 1 {
+		t.Fatalf("should fire when max score <0.60: %+v", got)
 	}
 }
 
-func TestRule_TaskUnderspecified_FiresOnUnknownAction(t *testing.T) {
+func TestRule_TaskUnderspecified_DoesNotFireWhenMaxScoreAbove(t *testing.T) {
+	in := mkInputs()
+	in.Assignments = []selection.Assignment{{Path: "pkg/foo.go", Score: 0.75, LoadMode: manifest.LoadModeFull}}
+	if got := taskUnderspecified(in); len(got) != 0 {
+		t.Fatalf("should not fire when max score ≥0.60: %+v", got)
+	}
+}
+
+// Anchors<2 and action=unknown are already covered by feasibility's
+// task_specificity sub-signal; the rule must NOT double-count them here.
+func TestRule_TaskUnderspecified_AnchorsAndActionAloneDoNotFire(t *testing.T) {
 	in := mkInputs()
 	in.Task.Type = manifest.ActionTypeUnknown
-	in.Task.Anchors = []string{"a", "b", "c"}
-	if got := taskUnderspecified(in); len(got) == 0 {
-		t.Fatalf("should fire for unknown action type")
+	in.Task.Anchors = []string{"only"}
+	in.Assignments = []selection.Assignment{{Path: "pkg/foo.go", Score: 0.80, LoadMode: manifest.LoadModeFull}}
+	if got := taskUnderspecified(in); len(got) != 0 {
+		t.Fatalf("anchors/action triggers alone must not fire this rule: %+v", got)
 	}
 }
 

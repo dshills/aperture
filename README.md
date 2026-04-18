@@ -227,7 +227,7 @@ Priority is strict: "investigate why the new fix breaks" classifies as
 | `missing_runtime_path` | Feature/bugfix/migration + runtime anchors + no selected file carries an `io:*` side-effect tag |
 | `missing_external_contract` | Task mentions API/RPC/schema + no `*openapi*` / `*swagger*` / `*schema*` / `*api*` file selected |
 | `oversized_primary_context` | Budget underflow, or a highly-relevant file was demoted from `full` |
-| `task_underspecified` | <2 anchors OR action type `unknown` OR no candidate reaches 0.60 |
+| `task_underspecified` | No candidate reaches score 0.60. (The SPEC lists three triggers, but the anchors<2 and action=unknown triggers are already folded into feasibility's `task_specificity` sub-signal; firing the gap on them would double-count the same weakness once in the gap list and again in the feasibility math.) |
 
 ### Feasibility
 
@@ -515,6 +515,55 @@ changes the manifest hash.
 Every emitted manifest is validated against `schema/manifest.v1.json`
 before write. A validation failure exits 6 and nothing is persisted.
 
+**`manifest_id` vs `manifest_hash`.** These two fields do different
+jobs and should not be confused:
+
+- `manifest_id` (`apt_<16 hex>`) is a **per-run correlation handle**.
+  It's derived from random bytes at generation time and differs on
+  every run, even when the planning decisions are byte-identical. Use
+  it to tie a manifest to its log lines, its merged-prompt file
+  (`run-<id>.md`), and the adapter invocation it drove.
+- `manifest_hash` (`sha256:<64 hex>`) is the **semantic identity of
+  the plan**. It's computed over the normalized manifest with all
+  per-run fields (`manifest_id`, `generated_at`, `host`, `pid`,
+  `wall_clock_started_at`, `aperture_version`, `manifest_hash`
+  itself) stripped. Identical inputs produce identical hashes across
+  runs, across machines, and across patch-level Aperture builds.
+  This is the field CI should pin, diff, and gate on — not
+  `manifest_id`.
+
+### Reachable-mode plumbing
+
+`reachable` selections are files Aperture believes are relevant but
+didn't have budget for — the caller should know they exist and can
+pull them in on demand. They don't consume the token budget, but they
+are not invisible either. `aperture run` wires them through to the
+downstream agent in three places:
+
+1. **JSON manifest `reachable` array.** Each entry carries the path,
+   the score, and a `rationale` explaining why it was kept reachable
+   rather than dropped (usually "budget exceeded" or "load-mode
+   downgraded after full/summary didn't fit"). Agents that parse the
+   manifest directly (via `APERTURE_MANIFEST_PATH`) get the full list.
+2. **Markdown manifest `## Reachable` section.** The Markdown form
+   renders the same list as a bulleted section below `## Selections`,
+   with the score and one-line rationale per entry. This is the form
+   LLM-based agents typically read, because it's part of the merged
+   prompt.
+3. **Merged `run-<id>.md` prompt.** The file passed on stdin to the
+   adapter is the Markdown manifest concatenated with `---` and the
+   task text. The reachable section appears verbatim in that prompt,
+   so any downstream agent — whether `claude`, `codex`, or a custom
+   wrapper — sees the reachable list without needing to open a second
+   file.
+
+This means a coding agent can *ask* for a reachable file by path
+during its run and trust that Aperture already vetted it as relevant.
+The contract is: reachable files are pre-approved context, they just
+didn't fit this budget. They are not speculative suggestions and not
+fallbacks — they're the same ranked candidate set as `full` and the
+summary modes, re-routed because the ceiling binds.
+
 ---
 
 ## Security and trust
@@ -575,10 +624,15 @@ SPEC §8.2 targets: small ≤10 s cold / ≤1 s warm; medium ≤60 s cold /
 M-series; CI runners will be slower but still comfortably inside the
 gates.
 
-The cache is keyed by `sha256(path, size, mtime, tool_version)` and
-stored as JSON sidecar files under `.aperture/cache/`. A schema-drift
-sentinel at `.aperture/cache/VERSION` lets the binary invalidate the
-whole cache in one stat call when it sees an older-format entry.
+The cache is keyed by `sha256(path, size, mtime, selection_logic_version)`
+and stored as JSON sidecar files under `.aperture/cache/`. Binding to
+`selection_logic_version` (currently `"sel-v1"`) instead of the build
+version means a docs-only or CLI-message patch bump of Aperture no
+longer invalidates every AST parse on disk — only a change to the
+§7.4/§7.6 scoring or selection rules bumps `sel-v1` and wipes the
+cache. A schema-drift sentinel at `.aperture/cache/VERSION` still lets
+the binary invalidate the whole cache in one stat call when it sees an
+older on-disk format.
 
 ---
 

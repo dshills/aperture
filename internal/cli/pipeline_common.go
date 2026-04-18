@@ -6,6 +6,7 @@ import (
 
 	"github.com/dshills/aperture/internal/cache"
 	"github.com/dshills/aperture/internal/config"
+	"github.com/dshills/aperture/internal/manifest"
 	"github.com/dshills/aperture/internal/pipeline"
 	"github.com/dshills/aperture/internal/repo"
 	"github.com/dshills/aperture/internal/task"
@@ -51,10 +52,14 @@ func preparePlan(repoFlag string, taskArgs []string, inlineText, configFlag stri
 	}
 	parsed := task.Parse(rawText, task.ParseOptions{Source: source, IsMarkdown: isMarkdown})
 
-	// Attach the persistent AST cache. InvalidateAll-on-drift keeps
-	// version-bumped binaries from reading stale entries.
+	// Attach the persistent AST cache. Bind it to
+	// SelectionLogicVersion ("sel-v1"), not the aperture build
+	// version — docs-only patches shouldn't invalidate the entire
+	// cached AST parse set. InvalidateAll-on-drift still handles the
+	// on-disk schema bump (cache-v1 → cache-v2) that accompanied this
+	// keying change.
 	cacheDir := filepath.Join(repoRoot, ".aperture", "cache")
-	astCache := cache.New(cacheDir, version.Version)
+	astCache := cache.New(cacheDir, manifest.SelectionLogicVersion)
 	if astCache.DetectSchemaDrift() {
 		astCache.InvalidateAll("cache_schema_version mismatch")
 	}

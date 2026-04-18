@@ -360,33 +360,28 @@ func oversizedPrimaryContext(in Inputs) []manifest.Gap {
 	}}
 }
 
-// taskUnderspecified — §7.7.3: task has <2 anchors OR action type unknown
-// OR no candidate reaches score ≥0.60.
+// taskUnderspecified — §7.7.3. The spec lists three triggers (anchors<2,
+// action unknown, max score <0.60) but the first two are already folded
+// into feasibility's task_specificity sub-signal; firing a gap on them
+// double-counts the same weakness once in the gap list and again in the
+// feasibility math. Keep only the score-based trigger here: it's the one
+// signal task_specificity can't observe, because it depends on the post-
+// scoring assignment set.
 func taskUnderspecified(in Inputs) []manifest.Gap {
-	var triggers []string
-	if len(in.Task.Anchors) < 2 {
-		triggers = append(triggers, fmt.Sprintf("anchors=%d (<2)", len(in.Task.Anchors)))
-	}
-	if in.Task.Type == manifest.ActionTypeUnknown {
-		triggers = append(triggers, "action_type=unknown")
-	}
 	maxScore := 0.0
 	for _, a := range in.Assignments {
 		if a.Score > maxScore {
 			maxScore = a.Score
 		}
 	}
-	if maxScore < 0.60 {
-		triggers = append(triggers, fmt.Sprintf("max_candidate_score=%.2f (<0.60)", maxScore))
-	}
-	if len(triggers) == 0 {
+	if maxScore >= 0.60 {
 		return nil
 	}
 	return []manifest.Gap{{
 		Type:                 manifest.GapTaskUnderspecified,
 		Severity:             manifest.GapSeverityWarning,
 		Description:          "task is too thin to produce a confident selection",
-		Evidence:             triggers,
+		Evidence:             []string{fmt.Sprintf("max_candidate_score=%.2f (<0.60)", maxScore)},
 		SuggestedRemediation: remediationTaskUnderspecified(),
 	}}
 }

@@ -175,7 +175,7 @@ func writeCachedResults(
 				if entry == nil {
 					continue
 				}
-				key := cache.Key(r.Path, entry.Size, entry.MTime, c.ToolVersion)
+				key := cache.Key(r.Path, entry.Size, entry.MTime, c.SelectionLogicVersion)
 				ce := &cache.Entry{
 					Path:        r.Path,
 					Size:        entry.Size,
@@ -255,7 +255,7 @@ func lookupCachedFiles(
 					out <- resultRow{path: p, hit: false}
 					continue
 				}
-				key := cache.Key(p, entry.Size, entry.MTime, c.ToolVersion)
+				key := cache.Key(p, entry.Size, entry.MTime, c.SelectionLogicVersion)
 				ce, err := c.Get(key)
 				if err != nil || ce == nil {
 					out <- resultRow{path: p, hit: false}

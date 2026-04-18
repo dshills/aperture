@@ -22,19 +22,23 @@ import (
 // SchemaVersion identifies the on-disk format. Bump whenever the Entry
 // struct changes shape in a way that would produce garbage on read by an
 // older binary. A mismatch triggers a full .aperture/cache/ wipe.
-const SchemaVersion = "cache-v1"
+// Bumped to cache-v2 when the key derivation switched from
+// tool_version to selection_logic_version. Older entries become
+// unreachable under the new scheme; the schema-drift machinery wipes
+// them on first read.
+const SchemaVersion = "cache-v2"
 
 // Entry is the cached form of a single file's AST analysis. It mirrors
 // the subset of index.FileEntry that goanalysis populates; non-AST
 // fields (Size, SHA256, MTime, Extension, Language) stay on the walker
 // side because they're recomputed per run anyway.
 type Entry struct {
-	SchemaVersion string `json:"cache_schema_version"`
-	ToolVersion   string `json:"tool_version"`
-	Path          string `json:"path"`
-	Size          int64  `json:"size"`
-	MTime         string `json:"mtime"`
-	SHA256        string `json:"sha256"`
+	SchemaVersion         string `json:"cache_schema_version"`
+	SelectionLogicVersion string `json:"selection_logic_version"`
+	Path                  string `json:"path"`
+	Size                  int64  `json:"size"`
+	MTime                 string `json:"mtime"`
+	SHA256                string `json:"sha256"`
 
 	PackageName string         `json:"package_name,omitempty"`
 	Imports     []string       `json:"imports,omitempty"`
@@ -43,10 +47,19 @@ type Entry struct {
 	ParseError  bool           `json:"parse_error,omitempty"`
 }
 
-// Key derives the per-file cache-key hash per §7.11.2:
-// sha256(path + "\x00" + size + "\x00" + mtime + "\x00" + tool_version).
-// Returns the hex digest used as the cache-file basename.
-func Key(path string, size int64, mtime, toolVersion string) string {
+// Key derives the per-file cache-key hash:
+//
+//	sha256(path + "\x00" + size + "\x00" + mtime + "\x00"
+//	       + selection_logic_version)
+//
+// §7.11.2 defines the key components generically as "tool version" but
+// that under-specifies: a docs-only patch bump of Aperture would
+// invalidate the entire AST cache despite nothing in the scoring or
+// selection pipeline changing. Binding to selection_logic_version —
+// which changes ONLY when §7.4/§7.6 rules change — keeps the cache
+// warm across unrelated version bumps. Returns the hex digest used as
+// the cache-file basename.
+func Key(path string, size int64, mtime, selectionLogicVersion string) string {
 	h := sha256.New()
 	h.Write([]byte(path))
 	h.Write([]byte{0})
@@ -54,7 +67,7 @@ func Key(path string, size int64, mtime, toolVersion string) string {
 	h.Write([]byte{0})
 	h.Write([]byte(mtime))
 	h.Write([]byte{0})
-	h.Write([]byte(toolVersion))
+	h.Write([]byte(selectionLogicVersion))
 	return hex.EncodeToString(h.Sum(nil))
 }
 
@@ -65,9 +78,11 @@ type Cache struct {
 	// Dir is the absolute path to the cache root (typically .aperture/
 	// cache/). Created lazily on first write via initDir.
 	Dir string
-	// ToolVersion is baked into every key + entry so a version bump
-	// invalidates everything.
-	ToolVersion string
+	// SelectionLogicVersion is baked into every key + entry. It changes
+	// only when §7.4 / §7.6 scoring or selection rules change; the
+	// cache survives unrelated patch bumps (docs-only fixes, CLI
+	// messages, etc.) that would otherwise force a cold rebuild.
+	SelectionLogicVersion string
 
 	initOnce sync.Once
 	initErr  error
@@ -79,9 +94,14 @@ type Cache struct {
 	dirReady atomic.Bool
 }
 
-// New constructs a Cache rooted at dir with the given tool version.
-func New(dir, toolVersion string) *Cache {
-	return &Cache{Dir: dir, ToolVersion: toolVersion}
+// New constructs a Cache rooted at dir. selectionLogicVersion is
+// manifest.SelectionLogicVersion — a string ("sel-v1") bumped only
+// when the scoring or selection logic changes. Binding the cache to
+// this narrow version, rather than the aperture build version,
+// prevents docs-only or message-only patches from invalidating every
+// AST parse in the cache.
+func New(dir, selectionLogicVersion string) *Cache {
+	return &Cache{Dir: dir, SelectionLogicVersion: selectionLogicVersion}
 }
 
 // ErrMiss is returned by Get when no cache entry exists for the key or
@@ -117,10 +137,10 @@ func (c *Cache) Get(key string) (*Entry, error) {
 			"path", path, "expected", SchemaVersion, "got", e.SchemaVersion)
 		return nil, ErrMiss
 	}
-	if e.ToolVersion != c.ToolVersion {
-		slog.Debug("cache entry tool-version mismatch, removing",
-			"path", path, "expected", c.ToolVersion, "got", e.ToolVersion)
-		// Remove the stale entry so repeated tool-version churn doesn't
+	if e.SelectionLogicVersion != c.SelectionLogicVersion {
+		slog.Debug("cache entry selection-logic mismatch, removing",
+			"path", path, "expected", c.SelectionLogicVersion, "got", e.SelectionLogicVersion)
+		// Remove the stale entry so selection-logic version churn doesn't
 		// accumulate orphaned JSON files under .aperture/cache/. Failure
 		// is logged and swallowed — the cache miss result is all the
 		// caller actually needs to proceed.
@@ -170,7 +190,7 @@ func (c *Cache) Put(key string, e *Entry) error {
 		return err
 	}
 	e.SchemaVersion = SchemaVersion
-	e.ToolVersion = c.ToolVersion
+	e.SelectionLogicVersion = c.SelectionLogicVersion
 	b, err := json.Marshal(e)
 	if err != nil {
 		return fmt.Errorf("marshal cache entry: %w", err)

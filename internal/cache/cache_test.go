@@ -27,7 +27,7 @@ func sampleEntry() *Entry {
 func TestPutGet_Roundtrip(t *testing.T) {
 	c := New(t.TempDir(), "1.0.0")
 	e := sampleEntry()
-	key := Key(e.Path, e.Size, e.MTime, c.ToolVersion)
+	key := Key(e.Path, e.Size, e.MTime, c.SelectionLogicVersion)
 	if err := c.Put(key, e); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
@@ -51,18 +51,18 @@ func TestGet_MissReturnsErrMiss(t *testing.T) {
 	}
 }
 
-func TestGet_ToolVersionMismatchIsMiss(t *testing.T) {
+func TestGet_SelectionLogicMismatchIsMiss(t *testing.T) {
 	dir := t.TempDir()
 	c1 := New(dir, "1.0.0")
 	e := sampleEntry()
-	key := Key(e.Path, e.Size, e.MTime, c1.ToolVersion)
+	key := Key(e.Path, e.Size, e.MTime, c1.SelectionLogicVersion)
 	if err := c1.Put(key, e); err != nil {
 		t.Fatal(err)
 	}
 
 	c2 := New(dir, "2.0.0")
 	if _, err := c2.Get(key); err != ErrMiss {
-		t.Fatalf("tool-version bump must be a miss, got %v", err)
+		t.Fatalf("selection-logic-version bump must be a miss, got %v", err)
 	}
 }
 
