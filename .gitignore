@@ -9,3 +9,6 @@ dist/
 # checking them in would bloat the repo without adding information.
 /testdata/bench/small/
 /testdata/bench/medium/
+# Verifier artifacts (report.json, etc.) are produced by `verifier
+# analyze` on demand; they're CI-only outputs, not source.
+/.verifier/
