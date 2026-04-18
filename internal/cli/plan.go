@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -99,7 +97,7 @@ func runPlan(_ *cobra.Command, args []string, f planFlags) error {
 		return exitErr(1, fmt.Errorf("fingerprint: %w", err))
 	}
 
-	m, err := buildStubManifest(buildInputs{
+	m, err := BuildManifest(buildInputs{
 		Config:      cfg,
 		Task:        parsed,
 		RepoRoot:    repoRoot,
@@ -108,9 +106,16 @@ func runPlan(_ *cobra.Command, args []string, f planFlags) error {
 		Fingerprint: fingerprint,
 		Languages:   res.Index.LanguageHints(),
 		Exclusions:  res.Exclusions,
+		Index:       res.Index,
 	})
-	if err != nil {
-		return exitErr(1, err)
+	// BuildManifest returns (manifest, ExitCodeError) on underflow — we
+	// still emit the manifest body, then propagate the exit code.
+	var ec *ExitCodeError
+	underflow := false
+	if err != nil && errors.As(err, &ec) && ec.Code == 9 && m != nil {
+		underflow = true
+	} else if err != nil {
+		return err
 	}
 
 	jsonBytes, err := manifest.EmitJSON(m)
@@ -134,6 +139,9 @@ func runPlan(_ *cobra.Command, args []string, f planFlags) error {
 	default:
 		return usageErr(fmt.Sprintf("unknown --format %q", f.format))
 	}
+	if underflow {
+		return exitErr(9, fmt.Errorf("budget underflow: manifest emitted with incomplete=true"))
+	}
 	return nil
 }
 
@@ -146,6 +154,7 @@ type buildInputs struct {
 	Fingerprint string
 	Languages   []string
 	Exclusions  []repo.Exclusion
+	Index       *index.Index
 }
 
 // userOnly returns the config's user-added exclude patterns — i.e. cfg.Exclude
@@ -202,119 +211,6 @@ func walkerFiles(idx *index.Index) []repo.FileEntry {
 		})
 	}
 	return out
-}
-
-// buildStubManifest produces a Phase-1 manifest: populated task + deterministic
-// structural fields, empty arrays everywhere else. Later phases replace these
-// stubs with real scan/score/select output.
-func buildStubManifest(in buildInputs) (*manifest.Manifest, error) {
-	now := time.Now().UTC().Format(time.RFC3339)
-
-	estimator, estimatorVersion := resolveEstimator(in.ModelFlag, in.Config.Defaults.Model)
-	tokenCeiling := in.BudgetFlag
-	if tokenCeiling == 0 {
-		tokenCeiling = in.Config.Defaults.Budget
-	}
-	effective := tokenCeiling
-	r := in.Config.Defaults.Reserve
-	reserveTotal := r.Instructions + r.Reasoning + r.ToolOutput + r.Expansion
-	if effective > 0 {
-		effective -= reserveTotal
-		if effective < 0 {
-			effective = 0
-		}
-	}
-
-	resolvedModel := in.ModelFlag
-	if resolvedModel == "" {
-		resolvedModel = in.Config.Defaults.Model
-	}
-
-	anchors := append([]string{}, in.Task.Anchors...)
-	sort.Strings(anchors)
-
-	digest, err := in.Config.Digest()
-	if err != nil {
-		return nil, fmt.Errorf("config digest: %w", err)
-	}
-
-	host, hostErr := os.Hostname()
-	if hostErr != nil || host == "" {
-		host = "unknown"
-	}
-	m := &manifest.Manifest{
-		SchemaVersion: manifest.SchemaVersion,
-		GeneratedAt:   now,
-		Incomplete:    false,
-		Task: manifest.Task{
-			TaskID:             in.Task.TaskID,
-			Source:             in.Task.Source,
-			RawText:            in.Task.RawText,
-			Type:               in.Task.Type,
-			Objective:          in.Task.Objective,
-			Anchors:            anchors,
-			ExpectsTests:       in.Task.ExpectsTests,
-			ExpectsConfig:      in.Task.ExpectsConfig,
-			ExpectsDocs:        in.Task.ExpectsDocs,
-			ExpectsMigration:   in.Task.ExpectsMigration,
-			ExpectsAPIContract: in.Task.ExpectsAPIContract,
-		},
-		Repo: manifest.Repo{
-			Root:          in.RepoRoot,
-			Fingerprint:   in.Fingerprint,
-			LanguageHints: langHintsOrEmpty(in.Languages),
-		},
-		Budget: manifest.Budget{
-			Model:        resolvedModel,
-			TokenCeiling: tokenCeiling,
-			Reserved: manifest.Reserved{
-				Instructions: r.Instructions,
-				Reasoning:    r.Reasoning,
-				ToolOutput:   r.ToolOutput,
-				Expansion:    r.Expansion,
-			},
-			EffectiveContextBudget:  effective,
-			EstimatedSelectedTokens: 0,
-			Estimator:               estimator,
-			EstimatorVersion:        estimatorVersion,
-		},
-		Selections: []manifest.Selection{},
-		Reachable:  []manifest.Reachable{},
-		Exclusions: manifestExclusions(in.Exclusions),
-		Gaps:       []manifest.Gap{},
-		Feasibility: manifest.Feasibility{
-			Score:              0.0,
-			Assessment:         "pending: selection pipeline stubbed for Phase 1",
-			Positives:          []string{},
-			Negatives:          []string{},
-			BlockingConditions: []string{},
-			SubSignals:         map[string]float64{},
-		},
-		GenerationMetadata: manifest.GenerationMetadata{
-			ApertureVersion:         version.Version,
-			SelectionLogicVersion:   manifest.SelectionLogicVersion,
-			ConfigDigest:            digest,
-			SideEffectTablesVersion: manifest.SideEffectTablesVer,
-			Host:                    host,
-			PID:                     os.Getpid(),
-			WallClockStartedAt:      now,
-		},
-	}
-	if err := manifest.ApplyHash(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
-// resolveEstimator returns the v1 estimator identity for the given model. In
-// Phase 1 only the heuristic branch is wired; tiktoken integration lands in
-// Phase 3. "Recognized but unsupported" models therefore still map to the
-// heuristic here and will begin returning exit 10 once the real tokenizer is
-// introduced.
-func resolveEstimator(cliModel, cfgModel string) (string, string) {
-	_ = cliModel
-	_ = cfgModel
-	return "heuristic-3.5", "v1"
 }
 
 func resolveRepoRoot(flag string) (string, error) {
