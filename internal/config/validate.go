@@ -16,6 +16,16 @@ func (c Config) Validate() error {
 	if sum := c.Scoring.Weights.Sum(); math.Abs(sum-1.0) > 0.001 {
 		return fmt.Errorf("scoring.weights must sum to 1.0 ±0.001 (got %.6f)", sum)
 	}
+	// §7.2.3: floor ∈ [0,1], slope ∈ [0,1]. Deliberately no "slope
+	// defaults to 1 - floor" fallback; that would make review
+	// ambiguous. A flat ramp (floor + slope < 1) is a legitimate tune.
+	d := c.Scoring.MentionDampener
+	if d.Floor < 0 || d.Floor > 1 {
+		return fmt.Errorf("scoring.mention_dampener.floor must be in [0,1] (got %v)", d.Floor)
+	}
+	if d.Slope < 0 || d.Slope > 1 {
+		return fmt.Errorf("scoring.mention_dampener.slope must be in [0,1] (got %v)", d.Slope)
+	}
 	for name, a := range c.Agents {
 		if a.Command == "" {
 			return fmt.Errorf("agents.%s.command is required", name)

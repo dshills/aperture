@@ -1,0 +1,22 @@
+name: mention-dampener-counter-example
+
+# §11 / PLAN Phase 2 — counter-example guarding against dampener
+# over-reach: the task mentions a file AND that file really is the
+# answer. s_symbol (Greet) and s_filename (greet) both agree with the
+# mention, so other_max ≥ some nontrivial value and the dampener
+# either never applies or lifts back to 1.0. The expected top-ranked
+# selection under dampener=on must equal the top-ranked selection
+# under dampener=off — same path, possibly different absolute score.
+
+task: |
+  Update the Greet function in internal/greet/greet.go to accept an
+  optional greeting prefix.
+
+budget: 200000
+model: claude-sonnet-4-6
+
+repo_fingerprint: sha256:24d7b6e43a785a42756fa57865d281130094f83305ea07bfde39b20b49324f11
+
+expected:
+  selections:
+    - path: internal/greet/greet.go

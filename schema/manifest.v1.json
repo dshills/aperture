@@ -345,7 +345,13 @@
         "factor": {"type": "string"},
         "signal": {"type": "number"},
         "weight": {"type": "number"},
-        "contribution": {"type": "number"}
+        "contribution": {"type": "number"},
+        "dampener": {
+          "description": "v1.1 §10.1 per-factor dampener. 1.0 for every factor other than 'mention'; the computed dampener for 'mention'. Omitted entirely when scoring.mention_dampener.enabled=false so v1.0 manifests round-trip byte-identical.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
       }
     }
   }

@@ -43,8 +43,12 @@ func BuildManifest(in buildInputs) (*manifest.Manifest, error) {
 	// tokens). This avoids reading every file in large repos when most
 	// will be dropped as low-relevance.
 	//
-	// Step 1 — score with sDoc=0 (index-only).
-	scored := relevance.Score(in.Index, in.Task, in.Config.Scoring.Weights)
+	// Step 1 — score with sDoc=0 (index-only). The §7.2.2 dampener
+	// config flows into every scoring call so the manifest hash folds
+	// the dampener state in via the emitted selections and their
+	// breakdown fields.
+	dampenerOpts := relevance.DampenerFromConfig(in.Config.Scoring.MentionDampener)
+	scored := relevance.ScoreWithOptions(in.Index, in.Task, in.Config.Scoring.Weights, relevance.Options{Dampener: dampenerOpts})
 	scoresByPath := map[string]relevance.Scored{}
 	for _, s := range scored {
 		scoresByPath[s.Path] = s
@@ -72,7 +76,10 @@ func BuildManifest(in buildInputs) (*manifest.Manifest, error) {
 	// clarity. Either way, ALWAYS populate candidates' Score/Band from
 	// the resolved scores so the selector has inputs to compare.
 	if len(docTokens) > 0 {
-		rescored := relevance.ScoreWithOptions(in.Index, in.Task, in.Config.Scoring.Weights, relevance.Options{DocTokens: docTokens})
+		rescored := relevance.ScoreWithOptions(in.Index, in.Task, in.Config.Scoring.Weights, relevance.Options{
+			DocTokens: docTokens,
+			Dampener:  dampenerOpts,
+		})
 		for _, s := range rescored {
 			scoresByPath[s.Path] = s
 		}
@@ -306,10 +313,25 @@ func translateAssignments(
 	selections := make([]manifest.Selection, 0, len(assignments))
 	reachables := make([]manifest.Reachable, 0)
 
+	dampCfg := relevance.DampenerFromConfig(in.Config.Scoring.MentionDampener)
 	for _, a := range assignments {
 		s := scores[a.Path]
 		f := in.Index.File(a.Path)
-		breakdown := relevance.Breakdown(s.Signals, in.Config.Scoring.Weights)
+		breakdown := relevance.BreakdownWithDampener(s.Signals, in.Config.Scoring.Weights, dampCfg, s.Dampener)
+		// §8.4 verbose logging: surface the per-candidate dampener when
+		// it's below 1.0 and the candidate made the selection / reachable
+		// set. "dampener < 1.0" is the threshold for interesting events —
+		// a value of 1.0 means the dampener was inactive or the candidate
+		// had a peer signal fully agreeing.
+		if in.Verbose && dampCfg.Enabled && s.Dampener < 1.0 {
+			slog.Info("mention dampener applied",
+				"path", a.Path,
+				"dampener", s.Dampener,
+				"other_max", relevance.OtherMaxForDampener(s.Signals),
+				"mention_signal", s.Signals["mention"],
+				"load_mode", string(a.LoadMode),
+			)
+		}
 		if a.LoadMode == manifest.LoadModeReachable {
 			reachables = append(reachables, manifest.Reachable{
 				Path:           a.Path,

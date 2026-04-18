@@ -27,6 +27,7 @@ type planFlags struct {
 	minFeasibility    float64
 	minFeasibilitySet bool // captured from cmd.Flags().Changed to allow --min-feasibility 0 to disable a config threshold
 	configPath        string
+	verbose           bool
 }
 
 func newPlanCommand() *cobra.Command {
@@ -58,6 +59,7 @@ func newPlanCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&f.failOnGaps, "fail-on-gaps", false, "Exit 8 if any blocking gap is present")
 	cmd.Flags().Float64Var(&f.minFeasibility, "min-feasibility", 0.0, "Exit 7 if feasibility < threshold")
 	cmd.Flags().StringVar(&f.configPath, "config", "", "Path to .aperture.yaml (default: <repo>/.aperture.yaml)")
+	cmd.Flags().BoolVar(&f.verbose, "verbose", false, "Emit extra diagnostics to stderr (dampener factors, etc.)")
 	return cmd
 }
 
@@ -77,6 +79,7 @@ func runPlan(_ *cobra.Command, args []string, f planFlags) error {
 		Languages:   prep.Languages,
 		Exclusions:  prep.Exclusions,
 		Index:       prep.PipelineRes.Index,
+		Verbose:     f.verbose,
 	})
 	// BuildManifest returns (manifest, ExitCodeError) on underflow — we
 	// still emit the manifest body, then propagate the exit code.
@@ -152,6 +155,9 @@ type buildInputs struct {
 	Languages   []string
 	Exclusions  []repo.Exclusion
 	Index       *index.Index
+	// Verbose enables stderr diagnostic logging (SPEC §8.4). Default
+	// false keeps BuildManifest byte-identical and silent.
+	Verbose bool
 }
 
 // userOnly returns the config's user-added exclude patterns — i.e. cfg.Exclude

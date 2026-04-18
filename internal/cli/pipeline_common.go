@@ -53,11 +53,12 @@ func preparePlan(repoFlag string, taskArgs []string, inlineText, configFlag stri
 	parsed := task.Parse(rawText, task.ParseOptions{Source: source, IsMarkdown: isMarkdown})
 
 	// Attach the persistent AST cache. Bind it to
-	// SelectionLogicVersion ("sel-v1"), not the aperture build
-	// version — docs-only patches shouldn't invalidate the entire
-	// cached AST parse set. InvalidateAll-on-drift still handles the
-	// on-disk schema bump (cache-v1 → cache-v2) that accompanied this
-	// keying change.
+	// SelectionLogicVersion (currently "sel-v2"), not the aperture
+	// build version — docs-only patches shouldn't invalidate the
+	// entire cached AST parse set. InvalidateAll-on-drift still
+	// handles the on-disk schema bump (cache-v1 → cache-v2) that
+	// accompanied this keying change. The v1.1 §8.3 bump to sel-v2
+	// flowed naturally through this reference.
 	cacheDir := filepath.Join(repoRoot, ".aperture", "cache")
 	astCache := cache.New(cacheDir, manifest.SelectionLogicVersion)
 	if astCache.DetectSchemaDrift() {

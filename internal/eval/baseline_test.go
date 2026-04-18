@@ -22,7 +22,7 @@ func TestWriteAndLoadBaseline_RoundTrip(t *testing.T) {
 		SchemaVersion:         BaselineSchemaVersion,
 		GeneratedAt:           "2026-04-18T00:00:00Z",
 		ApertureVersion:       "dev",
-		SelectionLogicVersion: "sel-v1",
+		SelectionLogicVersion: "sel-v2",
 		Fixtures: map[string]BaselineFixtureM{
 			"foo": {Precision: 0.9, Recall: 0.9, F1: 0.9},
 			"bar": {Precision: 1.0, Recall: 1.0, F1: 1.0},

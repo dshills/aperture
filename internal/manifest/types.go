@@ -45,8 +45,14 @@ const (
 )
 
 const (
-	SchemaVersion         = "1.0"
-	SelectionLogicVersion = "sel-v1"
+	SchemaVersion = "1.0"
+	// SelectionLogicVersion is bumped whenever a change to the
+	// selection math requires cache invalidation. v1.1 §8.3 bumped
+	// "sel-v1" → "sel-v2" in the same commit that flipped the mention
+	// dampener default to enabled — the two changes are atomic so no
+	// cache entry can be written under sel-v2 keys with pre-dampener
+	// scoring.
+	SelectionLogicVersion = "sel-v2"
 	SideEffectTablesVer   = "side-effect-tables-v1"
 )
 
@@ -121,6 +127,13 @@ type BreakdownEntry struct {
 	Signal       float64 `json:"signal"`
 	Weight       float64 `json:"weight"`
 	Contribution float64 `json:"contribution"`
+	// Dampener is the v1.1 §7.2.2 per-factor dampener. Emitted for
+	// every factor when the mention dampener is enabled: 1.0 for
+	// every factor OTHER than "mention", and the computed dampener
+	// value for "mention". When the dampener is disabled (§7.2.3
+	// `enabled: false`), the field is omitted entirely so v1.0
+	// manifests round-trip byte-identical.
+	Dampener *float64 `json:"dampener,omitempty"`
 }
 
 type Reachable struct {

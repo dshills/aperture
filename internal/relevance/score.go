@@ -35,6 +35,12 @@ type Scored struct {
 	Path    string
 	Score   float64
 	Signals map[string]float64
+	// Dampener is the resolved §7.2.2 factor applied to s_mention for
+	// this file. 1.0 when the dampener is disabled; in [floor, 1.0]
+	// when enabled. Breakdown() plumbs this into the per-factor
+	// manifest entry for the "mention" factor so downstream consumers
+	// can reproduce the contribution.
+	Dampener float64
 }
 
 // Options configures optional inputs to Score.
@@ -45,6 +51,11 @@ type Options struct {
 	// this so sDoc can compute Jaccard similarity without re-reading the
 	// filesystem from inside the scoring layer. Missing paths yield 0.
 	DocTokens map[string]map[string]struct{}
+
+	// Dampener controls the v1.1 §7.2.2 mention dampener. The zero
+	// value (Enabled=false) preserves v1.0 scoring byte-identically.
+	// Callers resolved from .aperture.yaml supply the §7.2.3 defaults.
+	Dampener DampenerConfig
 }
 
 // Score runs the full two-pass pipeline from §7.4.2.1 against an index
@@ -60,6 +71,7 @@ func Score(idx *index.Index, t task.Task, w config.Weights) []Scored {
 func ScoreWithOptions(idx *index.Index, t task.Task, w config.Weights, opts Options) []Scored {
 	ctx := buildContext(idx, t)
 	ctx.docTokens = opts.DocTokens
+	ctx.dampener = opts.Dampener
 	// Precompute per-repo lookup indexes once so per-file signal functions
 	// are O(1) instead of O(packages) or O(packages·log packages). These
 	// structures are read-only for the remainder of Score.
@@ -79,8 +91,9 @@ func ScoreWithOptions(idx *index.Index, t task.Task, w config.Weights, opts Opti
 			"doc":      sDoc(f, ctx),
 			"config":   sConfig(f, t, ctx),
 		}
-		score := clamp01(combine(signals, w))
-		pass1 = append(pass1, Scored{Path: f.Path, Score: score, Signals: signals})
+		damp := Dampen(OtherMaxForDampener(signals), ctx.dampener)
+		score := clamp01(combine(signals, w, damp))
+		pass1 = append(pass1, Scored{Path: f.Path, Score: score, Signals: signals, Dampener: damp})
 		pass1ByPath[f.Path] = score
 	}
 
@@ -101,7 +114,8 @@ func ScoreWithOptions(idx *index.Index, t task.Task, w config.Weights, opts Opti
 	// otherwise happen as every file hits resolveImportDir per import.
 	importCache := buildImportResolutionCache(idx, sortedPkgKeys, pkgImports)
 
-	// Pass 2: compute s_import and roll into final score.
+	// Pass 2: compute s_import and roll into final score. The dampener
+	// is recomputed because s_import is part of other_max (§7.2.2).
 	out := make([]Scored, 0, len(pass1))
 	for _, entry := range pass1 {
 		f := idx.File(entry.Path)
@@ -109,7 +123,8 @@ func ScoreWithOptions(idx *index.Index, t task.Task, w config.Weights, opts Opti
 			continue
 		}
 		entry.Signals["import"] = sImport(f, importCache, pkgScores, pkgImports)
-		entry.Score = clamp01(combine(entry.Signals, w))
+		entry.Dampener = Dampen(OtherMaxForDampener(entry.Signals), ctx.dampener)
+		entry.Score = clamp01(combine(entry.Signals, w, entry.Dampener))
 		out = append(out, entry)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
@@ -167,23 +182,23 @@ func buildPackageImportsCache(idx *index.Index) map[string][]string {
 }
 
 // combine multiplies each signal by its weight and sums them. Factors
-// absent from the signals map contribute zero.
-func combine(signals map[string]float64, w config.Weights) float64 {
-	weights := map[string]float64{
-		"mention":  w.Mention,
-		"filename": w.Filename,
-		"symbol":   w.Symbol,
-		"import":   w.Import,
-		"package":  w.Package,
-		"test":     w.Test,
-		"doc":      w.Doc,
-		"config":   w.Config,
-	}
-	var sum float64
-	for _, name := range factorOrder {
-		sum += signals[name] * weights[name]
-	}
-	return sum
+// absent from the signals map contribute zero. The per-file dampener
+// (§7.2.2) is applied to s_mention before its weight is multiplied in;
+// callers pass 1.0 when the dampener is disabled.
+//
+// This function is invoked twice per file (pass 1 + pass 2), so every
+// per-file allocation counts on large repos. The weights lookup is
+// inlined against config.Weights' struct fields rather than a map to
+// avoid a fresh map allocation each call.
+func combine(signals map[string]float64, w config.Weights, mentionDampener float64) float64 {
+	return signals["mention"]*mentionDampener*w.Mention +
+		signals["filename"]*w.Filename +
+		signals["symbol"]*w.Symbol +
+		signals["import"]*w.Import +
+		signals["package"]*w.Package +
+		signals["test"]*w.Test +
+		signals["doc"]*w.Doc +
+		signals["config"]*w.Config
 }
 
 func clamp01(f float64) float64 {
@@ -208,6 +223,7 @@ type scoringContext struct {
 	actionType     manifest.ActionType
 	task           task.Task
 	docTokens      map[string]map[string]struct{}
+	dampener       DampenerConfig
 }
 
 func buildContext(_ *index.Index, t task.Task) *scoringContext {

@@ -71,7 +71,7 @@ func TestEvalRun_OrphanedBaselineEntryFails(t *testing.T) {
 		SchemaVersion:         eval.BaselineSchemaVersion,
 		GeneratedAt:           "2026-04-18T00:00:00Z",
 		ApertureVersion:       "test",
-		SelectionLogicVersion: "sel-v1",
+		SelectionLogicVersion: "sel-v2",
 		Fixtures: map[string]eval.BaselineFixtureM{
 			"trivial-pass":   {Precision: 1, Recall: 1, F1: 1},
 			"does-not-exist": {Precision: 1, Recall: 1, F1: 1},

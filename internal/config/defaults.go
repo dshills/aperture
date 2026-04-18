@@ -15,6 +15,18 @@ func DefaultWeights() Weights {
 	}
 }
 
+// DefaultMentionDampener returns the v1.1 §7.2.3 defaults. These are the
+// values that apply when the `scoring.mention_dampener` block is absent
+// from a user's .aperture.yaml. Per §7.2.3, each field also defaults
+// independently when the block is present but partial.
+func DefaultMentionDampener() MentionDampener {
+	return MentionDampener{
+		Enabled: true,
+		Floor:   0.30,
+		Slope:   0.70,
+	}
+}
+
 // DefaultReserve is the §9.1.1 reserved-token baseline.
 func DefaultReserve() Reserve {
 	return Reserve{
@@ -131,8 +143,11 @@ func Default() Config {
 			Directory: ".aperture/manifests",
 			Format:    "json",
 		},
-		Scoring: Scoring{Weights: DefaultWeights()},
-		Gaps:    Gaps{Blocking: []string{}},
-		Agents:  DefaultAgents(),
+		Scoring: Scoring{
+			Weights:         DefaultWeights(),
+			MentionDampener: DefaultMentionDampener(),
+		},
+		Gaps:   Gaps{Blocking: []string{}},
+		Agents: DefaultAgents(),
 	}
 }

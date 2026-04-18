@@ -11,7 +11,7 @@ func TestEmitJSON_Deterministic(t *testing.T) {
 	r := &RunReport{
 		SchemaVersion:         "1.0",
 		ApertureVersion:       "test",
-		SelectionLogicVersion: "sel-v1",
+		SelectionLogicVersion: "sel-v2",
 		Fixtures: []FixtureResult{
 			{Name: "a", Metrics: Metrics{Precision: 1, Recall: 1, F1: 1}},
 			{Name: "b", Metrics: Metrics{Precision: 0.5, Recall: 0.5, F1: 0.5}},

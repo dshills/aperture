@@ -1,0 +1,27 @@
+name: mention-dampener-false-positive
+
+# §3.2, §11 — a fixture whose v1.0 plan is wrong because s_mention
+# dominates: the task names provider.go but the real logic lives in
+# refresh.go. With the v1.1 dampener enabled, s_mention is clamped to
+# 30% of its v1.0 contribution on provider.go (none of s_symbol,
+# s_filename, s_import, s_package agree), so refresh.go — which
+# actually exports RefreshToken and the retry loop — outranks it.
+#
+# The expected selection is refresh.go; provider.go must NOT outrank
+# it. The fixture does not pin provider.go in `forbidden` because its
+# relevance_score is expected to remain non-zero (the task does mention
+# it); the proof that the dampener worked is the RANKING of refresh.go
+# above provider.go, which this fixture's expected.selections captures.
+
+task: |
+  Fix the token refresh regression in provider.go. The bug is that
+  refresh_token retry attempts aren't actually firing.
+
+budget: 200000
+model: claude-sonnet-4-6
+
+repo_fingerprint: sha256:dc13da219e18f6361ed8734e022abf1a5250759383c301c80aa2226d1d6e9878
+
+expected:
+  selections:
+    - path: internal/oauth/refresh.go

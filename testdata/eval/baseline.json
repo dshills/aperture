@@ -1,9 +1,19 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-04-18T16:04:20Z",
+  "generated_at": "2026-04-18T17:23:52Z",
   "aperture_version": "dev",
-  "selection_logic_version": "sel-v1",
+  "selection_logic_version": "sel-v2",
   "fixtures": {
+    "mention-dampener-counter-example": {
+      "precision": 1,
+      "recall": 1,
+      "f1": 1
+    },
+    "mention-dampener-false-positive": {
+      "precision": 1,
+      "recall": 0,
+      "f1": 0
+    },
     "trivial-fail": {
       "precision": 0,
       "recall": 0,

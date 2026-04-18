@@ -63,7 +63,17 @@ type Output struct {
 }
 
 type Scoring struct {
-	Weights Weights `yaml:"weights" json:"weights"`
+	Weights         Weights         `yaml:"weights" json:"weights"`
+	MentionDampener MentionDampener `yaml:"mention_dampener" json:"mention_dampener"`
+}
+
+// MentionDampener is the §7.2.3 config block controlling the v1.1
+// mention-dampener feature. When Enabled, s_mention is multiplied by
+// min(1.0, Floor + Slope*other_max) before its weight is applied.
+type MentionDampener struct {
+	Enabled bool    `yaml:"enabled" json:"enabled"`
+	Floor   float64 `yaml:"floor" json:"floor"`
+	Slope   float64 `yaml:"slope" json:"slope"`
 }
 
 type Weights struct {
@@ -168,7 +178,16 @@ type rawDefaults struct {
 }
 
 type rawScoring struct {
-	Weights *Weights `yaml:"weights"`
+	Weights         *Weights            `yaml:"weights"`
+	MentionDampener *rawMentionDampener `yaml:"mention_dampener"`
+}
+
+// rawMentionDampener uses pointer fields so the loader distinguishes
+// "absent" from "explicit zero" for each §7.2.3 knob independently.
+type rawMentionDampener struct {
+	Enabled *bool    `yaml:"enabled"`
+	Floor   *float64 `yaml:"floor"`
+	Slope   *float64 `yaml:"slope"`
 }
 
 func (r rawConfig) merge(base Config) (Config, error) {
@@ -212,8 +231,25 @@ func (r rawConfig) merge(base Config) (Config, error) {
 			base.Output.Format = r.Output.Format
 		}
 	}
-	if r.Scoring != nil && r.Scoring.Weights != nil {
-		base.Scoring.Weights = *r.Scoring.Weights
+	if r.Scoring != nil {
+		if r.Scoring.Weights != nil {
+			base.Scoring.Weights = *r.Scoring.Weights
+		}
+		if r.Scoring.MentionDampener != nil {
+			// §7.2.3: each field defaults independently when the block
+			// is present but partial. Start from the resolved base
+			// (which already carries the §7.2.3 defaults) and overwrite
+			// only the explicitly-set fields.
+			if r.Scoring.MentionDampener.Enabled != nil {
+				base.Scoring.MentionDampener.Enabled = *r.Scoring.MentionDampener.Enabled
+			}
+			if r.Scoring.MentionDampener.Floor != nil {
+				base.Scoring.MentionDampener.Floor = *r.Scoring.MentionDampener.Floor
+			}
+			if r.Scoring.MentionDampener.Slope != nil {
+				base.Scoring.MentionDampener.Slope = *r.Scoring.MentionDampener.Slope
+			}
+		}
 	}
 	if r.Gaps != nil {
 		base.Gaps = *r.Gaps
