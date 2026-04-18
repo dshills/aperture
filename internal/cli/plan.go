@@ -12,22 +12,21 @@ import (
 	"github.com/dshills/aperture/internal/config"
 	"github.com/dshills/aperture/internal/index"
 	"github.com/dshills/aperture/internal/manifest"
-	"github.com/dshills/aperture/internal/pipeline"
 	"github.com/dshills/aperture/internal/repo"
 	"github.com/dshills/aperture/internal/task"
-	"github.com/dshills/aperture/internal/version"
 )
 
 type planFlags struct {
-	repo           string
-	inline         string
-	model          string
-	budget         int
-	format         string
-	out            string
-	failOnGaps     bool
-	minFeasibility float64
-	configPath     string
+	repo              string
+	inline            string
+	model             string
+	budget            int
+	format            string
+	out               string
+	failOnGaps        bool
+	minFeasibility    float64
+	minFeasibilitySet bool // captured from cmd.Flags().Changed to allow --min-feasibility 0 to disable a config threshold
+	configPath        string
 }
 
 func newPlanCommand() *cobra.Command {
@@ -43,6 +42,10 @@ func newPlanCommand() *cobra.Command {
 			if len(args) > 0 && f.inline != "" {
 				return usageErr("TASK_FILE and -p/--prompt are mutually exclusive")
 			}
+			// Distinguish "flag explicitly set" from "flag left at zero default"
+			// so --min-feasibility 0 can disable a config-level threshold
+			// (rather than silently falling back to it).
+			f.minFeasibilitySet = cmd.Flags().Changed("min-feasibility")
 			return runPlan(cmd, args, f)
 		},
 	}
@@ -59,60 +62,27 @@ func newPlanCommand() *cobra.Command {
 }
 
 func runPlan(_ *cobra.Command, args []string, f planFlags) error {
-	repoRoot, err := resolveRepoRoot(f.repo)
+	prep, err := preparePlan(f.repo, args, f.inline, f.configPath)
 	if err != nil {
-		return exitErr(4, err)
-	}
-
-	rawText, source, isMarkdown, err := readTask(args, f.inline)
-	if err != nil {
-		return exitErr(3, err)
-	}
-
-	cfgPath := f.configPath
-	if cfgPath == "" {
-		cfgPath = filepath.Join(repoRoot, ".aperture.yaml")
-	}
-	cfg, err := config.Load(config.LoadOptions{Path: cfgPath})
-	if err != nil {
-		return exitErr(5, err)
-	}
-	if err := cfg.Validate(); err != nil {
-		return exitErr(5, err)
-	}
-
-	parsed := task.Parse(rawText, task.ParseOptions{Source: source, IsMarkdown: isMarkdown})
-
-	res, err := pipeline.Build(pipeline.BuildOptions{
-		Root:            repoRoot,
-		DefaultExcludes: config.DefaultExclusions(),
-		UserExcludes:    userOnly(cfg),
-	})
-	if err != nil {
-		return exitErr(1, fmt.Errorf("index build: %w", err))
-	}
-
-	fingerprint, err := repo.Fingerprint(walkerFiles(res.Index), version.Version)
-	if err != nil {
-		return exitErr(1, fmt.Errorf("fingerprint: %w", err))
+		return err
 	}
 
 	m, err := BuildManifest(buildInputs{
-		Config:      cfg,
-		Task:        parsed,
-		RepoRoot:    repoRoot,
+		Config:      prep.Config,
+		Task:        prep.Task,
+		RepoRoot:    prep.RepoRoot,
 		ModelFlag:   f.model,
 		BudgetFlag:  f.budget,
-		Fingerprint: fingerprint,
-		Languages:   res.Index.LanguageHints(),
-		Exclusions:  res.Exclusions,
-		Index:       res.Index,
+		Fingerprint: prep.Fingerprint,
+		Languages:   prep.Languages,
+		Exclusions:  prep.Exclusions,
+		Index:       prep.PipelineRes.Index,
 	})
 	// BuildManifest returns (manifest, ExitCodeError) on underflow — we
 	// still emit the manifest body, then propagate the exit code.
 	var ec *ExitCodeError
 	underflow := false
-	if err != nil && errors.As(err, &ec) && ec.Code == 9 && m != nil {
+	if err != nil && errors.As(err, &ec) && ec.Code == exitCodeBudgetUnderflow && m != nil {
 		underflow = true
 	} else if err != nil {
 		return err
@@ -120,27 +90,54 @@ func runPlan(_ *cobra.Command, args []string, f planFlags) error {
 
 	jsonBytes, err := manifest.EmitJSON(m)
 	if err != nil {
-		return exitErr(6, fmt.Errorf("serialize manifest: %w", err))
+		return exitErr(exitCodeBadManifest, fmt.Errorf("serialize manifest: %w", err))
 	}
 	if err := manifest.Validate(jsonBytes); err != nil {
-		return exitErr(6, err)
+		return exitErr(exitCodeBadManifest, err)
 	}
 
 	switch f.format {
 	case "json":
 		if err := writeOutput(f.out, jsonBytes); err != nil {
-			return exitErr(6, err)
+			return exitErr(exitCodeBadManifest, err)
 		}
 	case "markdown":
 		md := manifest.EmitMarkdown(m)
 		if err := writeOutput(f.out, md); err != nil {
-			return exitErr(6, err)
+			return exitErr(exitCodeBadManifest, err)
 		}
 	default:
 		return usageErr(fmt.Sprintf("unknown --format %q", f.format))
 	}
 	if underflow {
-		return exitErr(9, fmt.Errorf("budget underflow: manifest emitted with incomplete=true"))
+		return exitErr(exitCodeBudgetUnderflow, fmt.Errorf("budget underflow: manifest emitted with incomplete=true"))
+	}
+
+	// §16: --fail-on-gaps → exit 8 when any blocking gap is present; or
+	// when a gap whose type is in gaps.blocking config fired. The engine
+	// has already applied the config upgrade, so we can check severity
+	// directly.
+	if f.failOnGaps || prep.Config.Thresholds.FailOnBlockingGaps {
+		for _, g := range m.Gaps {
+			if g.Severity == manifest.GapSeverityBlocking {
+				return exitErr(exitCodeFailOnGaps, fmt.Errorf("blocking gap %s: %s", g.ID, g.Description))
+			}
+		}
+	}
+
+	// §16: --min-feasibility (or thresholds.min_feasibility) → exit 7
+	// when the resolved score is below the threshold. A CLI flag wins
+	// over config even when its value is 0 — that way a user can pass
+	// --min-feasibility 0 to disable the gate for one invocation.
+	var minFeas float64
+	switch {
+	case f.minFeasibilitySet:
+		minFeas = f.minFeasibility
+	case prep.Config.Thresholds.MinFeasibility > 0:
+		minFeas = prep.Config.Thresholds.MinFeasibility
+	}
+	if minFeas > 0 && m.Feasibility.Score < minFeas {
+		return exitErr(exitCodeFeasibilityBelow, fmt.Errorf("feasibility %.2f below threshold %.2f", m.Feasibility.Score, minFeas))
 	}
 	return nil
 }

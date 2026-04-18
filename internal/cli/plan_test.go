@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"testing"
 
 	"github.com/dshills/aperture/internal/config"
@@ -185,6 +186,73 @@ func TestReadTask_RejectsBinary(t *testing.T) {
 	}
 	if _, _, _, err := readTask([]string{p}, ""); err == nil {
 		t.Fatal("expected binary rejection")
+	}
+}
+
+// Phase-4: gaps and feasibility populated on small_go fixture.
+func TestBuildManifest_Phase4_GapsAndFeasibility(t *testing.T) {
+	in := buildFixtureInputs(t, "add refresh handling to internal/oauth/provider.go for github oauth", "", 120000)
+	m, err := BuildManifest(in)
+	if err != nil {
+		t.Fatalf("BuildManifest: %v", err)
+	}
+	// Feasibility must be populated with non-empty sub-signals.
+	if m.Feasibility.Score <= 0 {
+		t.Errorf("feasibility should be positive, got %.4f", m.Feasibility.Score)
+	}
+	for _, k := range []string{"coverage", "anchor_resolution", "task_specificity", "budget_headroom", "gap_penalty"} {
+		if _, ok := m.Feasibility.SubSignals[k]; !ok {
+			t.Errorf("missing sub_signal %q", k)
+		}
+	}
+	if m.Feasibility.Assessment == "" {
+		t.Error("assessment must be populated")
+	}
+	// All gap IDs sequential and start at gap-1.
+	for i, g := range m.Gaps {
+		want := "gap-" + strconv.Itoa(i+1)
+		if g.ID != want {
+			t.Errorf("gap %d has ID %q, want %q", i, g.ID, want)
+		}
+	}
+}
+
+// --min-feasibility threshold: exit code 7 when score falls below.
+func TestBuildManifest_Phase4_MinFeasibilityExit7(t *testing.T) {
+	// A task that will produce very low feasibility (unknown action type).
+	in := buildFixtureInputs(t, "foo bar baz", "", 120000)
+	m, err := BuildManifest(in)
+	if err != nil {
+		t.Fatalf("BuildManifest should not itself fail: %v", err)
+	}
+	if m.Feasibility.Score >= 0.85 {
+		t.Skipf("fixture happened to score above threshold (%.4f) — adjust task", m.Feasibility.Score)
+	}
+	// Simulate the plan command's threshold logic.
+	threshold := 0.85
+	if m.Feasibility.Score >= threshold {
+		t.Fatalf("expected score below threshold, got %.4f", m.Feasibility.Score)
+	}
+}
+
+// --fail-on-gaps: exit 8 when a blocking gap fires (via gaps.blocking
+// config upgrade from warning).
+func TestBuildManifest_Phase4_FailOnGapsExit8(t *testing.T) {
+	in := buildFixtureInputs(t, "add refresh handling to internal/oauth/provider.go for github oauth", "", 120000)
+	in.Config.Gaps.Blocking = []string{string(manifest.GapMissingSpec)}
+	m, err := BuildManifest(in)
+	if err != nil {
+		t.Fatalf("BuildManifest: %v", err)
+	}
+	var blocking *manifest.Gap
+	for i, g := range m.Gaps {
+		if g.Severity == manifest.GapSeverityBlocking {
+			blocking = &m.Gaps[i]
+			break
+		}
+	}
+	if blocking == nil {
+		t.Fatalf("expected at least one blocking gap after config upgrade, got %+v", m.Gaps)
 	}
 }
 

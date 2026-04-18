@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -11,6 +12,8 @@ import (
 	"time"
 
 	"github.com/dshills/aperture/internal/budget"
+	"github.com/dshills/aperture/internal/feasibility"
+	"github.com/dshills/aperture/internal/gaps"
 	"github.com/dshills/aperture/internal/index"
 	"github.com/dshills/aperture/internal/loadmode"
 	"github.com/dshills/aperture/internal/manifest"
@@ -32,7 +35,7 @@ func BuildManifest(in buildInputs) (*manifest.Manifest, error) {
 		if errors.As(err, &rerr) {
 			return nil, exitErr(rerr.Code, err)
 		}
-		return nil, exitErr(1, err)
+		return nil, exitErr(exitCodeInternal, err)
 	}
 
 	// Phase-3 pipeline is I/O-aware: score using index metadata first,
@@ -60,7 +63,7 @@ func BuildManifest(in buildInputs) (*manifest.Manifest, error) {
 	// the same read (no double I/O).
 	candidates, docTokens, err := buildViableCandidates(in, estimator, viablePaths)
 	if err != nil {
-		return nil, exitErr(1, err)
+		return nil, exitErr(exitCodeInternal, err)
 	}
 
 	// Step 4 — when any doc files carry task-relevant content, re-score
@@ -98,17 +101,102 @@ func BuildManifest(in buildInputs) (*manifest.Manifest, error) {
 
 	selections, reachable := translateAssignments(selResult.Assignments, scoresByPath, in)
 
-	m := assembleManifest(in, estimator, tokenCeiling, effective, selections, reachable, selResult.SpentTokens, underflow)
+	// Phase-4 gaps + feasibility. Gaps runs over the assignment list so
+	// it can introspect selected scores; underflow, if present, owns the
+	// oversized_primary_context blocking gap and the engine defers.
+	blockingCfg := blockingFromConfig(in.Config.Gaps.Blocking)
+	demotions := collectDemotions(selResult.Assignments)
+	// Flatten the scored map into path→score for the gaps engine so
+	// ambiguousOwnership can inspect package peers that didn't win a
+	// selection slot (per §7.7.3).
+	scoreMap := make(map[string]float64, len(scoresByPath))
+	for p, s := range scoresByPath {
+		scoreMap[p] = s.Score
+	}
+	ruleGaps := gaps.Engine(gaps.Inputs{
+		Task:           in.Task,
+		Index:          in.Index,
+		Assignments:    selResult.Assignments,
+		Underflow:      underflow,
+		Demotions:      demotions,
+		BlockingConfig: blockingCfg,
+		Scores:         scoreMap,
+	})
 	if underflow {
-		m.Gaps = []manifest.Gap{underflowGap(effective)}
+		// Prepend the §7.6.5 blocking gap so it keeps gap-1 and the rest
+		// reindex behind it.
+		allGaps := make([]manifest.Gap, 0, len(ruleGaps)+1)
+		allGaps = append(allGaps, underflowGap(effective))
+		allGaps = append(allGaps, ruleGaps...)
+		ruleGaps = renumberGaps(allGaps)
+	}
+
+	feas := feasibility.Compute(feasibility.Inputs{
+		Task:                    in.Task,
+		Index:                   in.Index,
+		Assignments:             selResult.Assignments,
+		EffectiveContextBudget:  effective,
+		EstimatedSelectedTokens: selResult.SpentTokens,
+		Gaps:                    ruleGaps,
+	})
+	pos, neg, block, sub := feasibility.Rationale(feas, ruleGaps)
+
+	m := assembleManifest(in, estimator, tokenCeiling, effective, selections, reachable, selResult.SpentTokens, underflow)
+	m.Gaps = ruleGaps
+	m.Feasibility = manifest.Feasibility{
+		Score:              round4(feas.Score),
+		Assessment:         feas.Assessment,
+		Positives:          pos,
+		Negatives:          neg,
+		BlockingConditions: block,
+		SubSignals:         sub,
 	}
 	if err := manifest.ApplyHash(m); err != nil {
-		return nil, exitErr(6, err)
+		return nil, exitErr(exitCodeBadManifest, err)
 	}
 	if underflow {
-		return m, exitErr(9, fmt.Errorf("budget underflow: no viable selection fits within %d tokens", effective))
+		return m, exitErr(exitCodeBudgetUnderflow, fmt.Errorf("budget underflow: no viable selection fits within %d tokens", effective))
 	}
+	// Threshold gates per §16. Evaluated in CLI caller — we just attach
+	// context here so runPlan can decide.
 	return m, nil
+}
+
+// blockingFromConfig converts the config-resolved gaps.blocking slice into
+// the set form the engine consumes.
+func blockingFromConfig(list []string) map[string]struct{} {
+	out := make(map[string]struct{}, len(list))
+	for _, s := range list {
+		out[s] = struct{}{}
+	}
+	return out
+}
+
+// collectDemotions extracts the demotion_reason map the gaps engine uses
+// to detect the non-underflow `oversized_primary_context` warning path.
+func collectDemotions(in []selection.Assignment) map[string]string {
+	out := map[string]string{}
+	for _, a := range in {
+		if a.DemotedReason != "" {
+			out[a.Path] = a.DemotedReason
+		}
+	}
+	return out
+}
+
+// renumberGaps resets every gap's ID to gap-1, gap-2, … in the slice's
+// current order. Used when the engine's output is combined with the
+// underflow gap so IDs remain stable across runs.
+//
+// Note: this function MODIFIES the input slice in place (changing each
+// entry's ID field) and returns the same slice. Callers should pass in
+// a slice they intend to mutate — typically one freshly assembled from
+// engine output.
+func renumberGaps(in []manifest.Gap) []manifest.Gap {
+	for i := range in {
+		in[i].ID = fmt.Sprintf("gap-%d", i+1)
+	}
+	return in
 }
 
 // underflowGap produces the §7.6.5 mandatory blocking gap that accompanies
@@ -462,11 +550,15 @@ func isBoundary(s string, i int) bool {
 	return true
 }
 
-// round4 trims to 4 decimal places so relevance_score JSON stays compact
-// while remaining unambiguous. The value is still a float64, and the
-// canonical hash emits floats via strconv.FormatFloat('f', -1, …), so
-// this rounding is the only place precision is intentionally dropped.
+// round4 trims a float64 to 4 decimal places. Used by BuildManifest for
+// the feasibility.score field and relevance_score entries so the JSON
+// emission stays compact while remaining unambiguous.
+//
+// Kept package-local; referenced by BuildManifest above (see "round4(feas.Score)")
+// and by translateAssignments for relevance_score + reachable-entry scores.
+// The canonical manifest hash emits floats via strconv.FormatFloat('f', -1, …),
+// so this rounding is the only place precision is intentionally dropped.
 func round4(f float64) float64 {
-	scale := 10000.0
-	return float64(int64(f*scale+0.5)) / scale
+	const scale = 10000.0
+	return math.Round(f*scale) / scale
 }

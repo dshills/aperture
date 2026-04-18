@@ -9,6 +9,23 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Named exit codes per SPEC §16. Use these constants everywhere instead
+// of bare integers so the error-code surface stays easy to audit.
+const (
+	exitCodeInternal           = 1  // unexpected failure
+	exitCodeBadArgs            = 2  // invalid command-line arguments
+	exitCodeBadTask            = 3  // unreadable task file
+	exitCodeBadRepo            = 4  // invalid repository root
+	exitCodeBadConfig          = 5  // malformed config
+	exitCodeBadManifest        = 6  // manifest serialization / schema failure
+	exitCodeFeasibilityBelow   = 7  // --min-feasibility threshold not met
+	exitCodeFailOnGaps         = 8  // blocking gap present and --fail-on-gaps set
+	exitCodeBudgetUnderflow    = 9  // §7.6.5 underflow
+	exitCodeTokenizerMissing   = 10 // recognized-but-unsupported model
+	exitCodeUnknownAgent       = 11 // agents.<name> not present
+	exitCodeAdapterPreExecFail = 12 // adapter could not start
+)
+
 // ExitCodeError carries a structured exit code for the top-level main wrapper.
 type ExitCodeError struct {
 	Code int
