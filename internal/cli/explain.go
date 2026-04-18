@@ -22,6 +22,8 @@ type explainFlags struct {
 	model      string
 	budget     int
 	configPath string
+	scope      string
+	scopeSet   bool
 }
 
 func newExplainCommand() *cobra.Command {
@@ -39,6 +41,7 @@ func newExplainCommand() *cobra.Command {
     rationale instead of emitting a machine-readable manifest.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			f.scopeSet = cmd.Flags().Changed("scope")
 			return runExplain(cmd.OutOrStdout(), args, f)
 		},
 	}
@@ -48,6 +51,7 @@ func newExplainCommand() *cobra.Command {
 	cmd.Flags().StringVar(&f.model, "model", "", "Target model id")
 	cmd.Flags().IntVar(&f.budget, "budget", 0, "Total token budget override")
 	cmd.Flags().StringVar(&f.configPath, "config", "", "Path to .aperture.yaml (default: <repo>/.aperture.yaml)")
+	cmd.Flags().StringVar(&f.scope, "scope", "", "Restrict candidate generation to this repo-relative subtree (\"\" or \".\" unsets any config scope)")
 	return cmd
 }
 
@@ -93,7 +97,7 @@ func loadManifest(path string) (*manifest.Manifest, error) {
 // gates are deliberately skipped — explain is a read-only lens. The
 // pipeline preparation itself is shared with runPlan via preparePlan.
 func explainViaPipeline(args []string, f explainFlags) (*manifest.Manifest, error) {
-	prep, err := preparePlan(f.repo, args, f.inline, f.configPath)
+	prep, err := preparePlan(f.repo, args, f.inline, f.configPath, scopeFlagInputs{Value: f.scope, Set: f.scopeSet})
 	if err != nil {
 		return nil, err
 	}
@@ -107,6 +111,7 @@ func explainViaPipeline(args []string, f explainFlags) (*manifest.Manifest, erro
 		Languages:   prep.Languages,
 		Exclusions:  prep.Exclusions,
 		Index:       prep.PipelineRes.Index,
+		Scope:       prep.Scope,
 	})
 	var ec *ExitCodeError
 	if err != nil && errors.As(err, &ec) && ec.Code == exitCodeBudgetUnderflow && m != nil {

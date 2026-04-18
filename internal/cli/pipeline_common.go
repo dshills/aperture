@@ -24,13 +24,52 @@ type commonInputs struct {
 	Languages   []string
 	Exclusions  []repo.Exclusion
 	PipelineRes pipeline.Result
+	Scope       repo.Scope
+}
+
+// resolveScope applies the §7.4.5 CLI-vs-config precedence to the
+// user-supplied --scope flag and the config's defaults.scope field:
+//
+//   - When the CLI flag was explicitly set, it wins. The sentinels ""
+//     and "." unset the config scope for this invocation.
+//   - Otherwise the config's defaults.scope applies (also subject to
+//     the same §7.4.4 validation).
+//
+// The resolved scope is returned as repo.Scope; an unset scope is the
+// zero value. Validation failures produce exit 4.
+func resolveScope(repoRoot string, cfg config.Config, flagValue string, flagSet bool) (repo.Scope, error) {
+	if flagSet {
+		s, err := repo.ResolveScope(repoRoot, flagValue)
+		if err != nil {
+			return repo.Scope{}, exitErr(exitCodeBadRepo, err)
+		}
+		return s, nil
+	}
+	if cfg.Defaults.Scope == "" {
+		return repo.Scope{}, nil
+	}
+	s, err := repo.ResolveScope(repoRoot, cfg.Defaults.Scope)
+	if err != nil {
+		return repo.Scope{}, exitErr(exitCodeBadRepo, err)
+	}
+	return s, nil
+}
+
+// scopeFlagInputs carries the post-parse `--scope` state from each
+// CLI command. Passing a struct keeps preparePlan's signature stable
+// as more flags accumulate.
+type scopeFlagInputs struct {
+	Value string
+	Set   bool
 }
 
 // preparePlan resolves the repo root, reads the task, loads config, walks
 // the repo, and computes the fingerprint — the shared preamble for both
 // `aperture plan` and `aperture explain`. taskPath is the positional
 // TASK_FILE (may be nil for inline-only). inlineText is the -p value.
-func preparePlan(repoFlag string, taskArgs []string, inlineText, configFlag string) (commonInputs, error) {
+// scopeFlag carries the CLI --scope state (value + whether-set), so the
+// function can apply the §7.4.5 CLI-vs-config override rules.
+func preparePlan(repoFlag string, taskArgs []string, inlineText, configFlag string, scopeFlag scopeFlagInputs) (commonInputs, error) {
 	repoRoot, err := resolveRepoRoot(repoFlag)
 	if err != nil {
 		return commonInputs{}, exitErr(exitCodeBadRepo, err)
@@ -79,6 +118,11 @@ func preparePlan(repoFlag string, taskArgs []string, inlineText, configFlag stri
 		return commonInputs{}, exitErr(exitCodeInternal, fmt.Errorf("fingerprint: %w", err))
 	}
 
+	scope, err := resolveScope(repoRoot, cfg, scopeFlag.Value, scopeFlag.Set)
+	if err != nil {
+		return commonInputs{}, err
+	}
+
 	return commonInputs{
 		RepoRoot:    repoRoot,
 		Config:      cfg,
@@ -87,5 +131,6 @@ func preparePlan(repoFlag string, taskArgs []string, inlineText, configFlag stri
 		Languages:   res.Index.LanguageHints(),
 		Exclusions:  res.Exclusions,
 		PipelineRes: res,
+		Scope:       scope,
 	}, nil
 }

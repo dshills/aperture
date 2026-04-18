@@ -38,6 +38,34 @@ func BuildManifest(in buildInputs) (*manifest.Manifest, error) {
 		return nil, exitErr(exitCodeInternal, err)
 	}
 
+	// §7.4.1 / §7.4.2: when scope is set, project the index
+	// (non-destructively) into (in-scope candidates, admissible
+	// out-of-scope supplementals). The walker already walked the
+	// whole repo so fingerprint and supplemental detection use the
+	// full tree; scope is applied downstream, at the candidate pool,
+	// not at the walker. The projection returns a NEW *index.Index;
+	// the caller's in.Index is left untouched so it can be shared
+	// across invocations without tripping a data race.
+	preScopeCount := len(in.Index.Files)
+	if in.Scope.IsSet() {
+		in.Index = applyScopeToIndex(in.Index, in.Scope)
+	}
+	postScopeCount := len(in.Index.Files)
+	if in.Verbose {
+		slog.Info("scope resolved",
+			"path", in.Scope.Path,
+			"pre_filter_candidates", preScopeCount,
+			"post_filter_candidates", postScopeCount,
+		)
+	}
+	// §7.4.6: scope leaves zero in-scope candidates AND no supplemental
+	// file survives as an admissible candidate → exit 9 (reuses the
+	// v1 §7.6.5 underflow code per §7.7 clarification).
+	if in.Scope.IsSet() && postScopeCount == 0 {
+		return nil, exitErr(exitCodeBudgetUnderflow,
+			fmt.Errorf("scope %q leaves zero planable candidates", in.Scope.Path))
+	}
+
 	// Phase-3 pipeline is I/O-aware: score using index metadata first,
 	// then read file content ONLY for viable candidates (and doc Jaccard
 	// tokens). This avoids reading every file in large repos when most
@@ -341,6 +369,13 @@ func translateAssignments(
 			})
 			continue
 		}
+		rationale := rationaleFor(s, f)
+		if f != nil && f.OutOfScope {
+			// §7.4.2 mandates this exact rationale token on
+			// out-of-scope supplementals so the manifest stays
+			// auditable about why a non-scoped file was admitted.
+			rationale = append(rationale, "outside_scope_supplemental")
+		}
 		sel := manifest.Selection{
 			Path:            a.Path,
 			Kind:            "file",
@@ -348,7 +383,7 @@ func translateAssignments(
 			RelevanceScore:  round4(s.Score),
 			ScoreBreakdown:  breakdown,
 			EstimatedTokens: a.Cost,
-			Rationale:       rationaleFor(s, f),
+			Rationale:       rationale,
 			SideEffects:     sideEffectsOrNil(f),
 		}
 		if a.DemotedReason != "" {
@@ -505,6 +540,12 @@ func assembleManifest(
 			PID:                     os.Getpid(),
 			WallClockStartedAt:      now,
 		},
+	}
+	// v1.1 §7.4.4: emit the scope projection here (not after) so every
+	// downstream step — including manifest.ApplyHash — sees the
+	// scoped and unscoped manifests as structurally distinct.
+	if in.Scope.IsSet() {
+		m.Scope = &manifest.Scope{Path: in.Scope.Path}
 	}
 	return m
 }

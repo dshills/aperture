@@ -50,6 +50,13 @@ type FileEntry struct {
 	// ParseError is true when the Go AST parse failed and the file fell
 	// back to the minimal import scan (SPEC §7.2.3).
 	ParseError bool
+	// OutOfScope is set by the CLI when a `--scope <path>` narrows the
+	// candidate pool. Marks this file as a §7.4.2 "supplemental outside
+	// scope" admit: scored with the restricted signal set (s_symbol,
+	// s_import, s_package, s_test forced to 0) and, when selected,
+	// emitted with `outside_scope_supplemental` rationale.
+	// Always false when no scope is active.
+	OutOfScope bool
 }
 
 // SymbolKind enumerates the exported-symbol classes v1 extracts.

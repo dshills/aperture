@@ -57,20 +57,33 @@ const (
 )
 
 type Manifest struct {
-	SchemaVersion      string             `json:"schema_version"`
-	ManifestID         string             `json:"manifest_id"`
-	ManifestHash       string             `json:"manifest_hash"`
-	GeneratedAt        string             `json:"generated_at"`
-	Incomplete         bool               `json:"incomplete"`
-	Task               Task               `json:"task"`
-	Repo               Repo               `json:"repo"`
-	Budget             Budget             `json:"budget"`
+	SchemaVersion string `json:"schema_version"`
+	ManifestID    string `json:"manifest_id"`
+	ManifestHash  string `json:"manifest_hash"`
+	GeneratedAt   string `json:"generated_at"`
+	Incomplete    bool   `json:"incomplete"`
+	Task          Task   `json:"task"`
+	Repo          Repo   `json:"repo"`
+	Budget        Budget `json:"budget"`
+	// Scope is the v1.1 §7.4.4 projection: emitted only when --scope
+	// or defaults.scope was set. Absent field ⇒ whole-repo plan.
+	// Present + contents fold into manifest_hash so a scoped plan's
+	// hash differs from the unscoped plan on the same inputs.
+	Scope              *Scope             `json:"scope,omitempty"`
 	Selections         []Selection        `json:"selections"`
 	Reachable          []Reachable        `json:"reachable"`
 	Exclusions         []Exclusion        `json:"exclusions"`
 	Gaps               []Gap              `json:"gaps"`
 	Feasibility        Feasibility        `json:"feasibility"`
 	GenerationMetadata GenerationMetadata `json:"generation_metadata"`
+}
+
+// Scope is the manifest payload for v1.1 §7.4.4. Only the user-supplied
+// (canonicalized) repo-relative path is emitted; the resolved absolute
+// path stays internal (host-dependent; would break hash determinism
+// across machines).
+type Scope struct {
+	Path string `json:"path"`
 }
 
 type Task struct {

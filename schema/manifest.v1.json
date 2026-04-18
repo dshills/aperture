@@ -40,6 +40,18 @@
     "incomplete": {
       "type": "boolean"
     },
+    "scope": {
+      "description": "v1.1 §7.4.4 scope projection. Present only when --scope or defaults.scope was set; absence means whole-repo.",
+      "type": "object",
+      "required": ["path"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Canonicalized repo-relative path, forward-slash, no leading './' or trailing '/'."
+        }
+      }
+    },
     "task": {
       "type": "object",
       "required": [

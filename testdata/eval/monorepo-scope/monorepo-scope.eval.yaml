@@ -1,0 +1,26 @@
+name: monorepo-scope
+
+# PLAN §Phase 3 — monorepo fixture that exercises the `--scope` flag.
+# The fixture task targets the billing service's Invoice.Finalize; a
+# full-repo plan would also surface services/ingest/internal/invoice.go
+# (same `Invoice` symbol name). With --scope services/billing active,
+# ingest's invoice file must be excluded from selections AND reachable.
+#
+# NOTE: the eval harness does not drive --scope through fixture YAML in
+# Phase 1's schema (scope is a planner input, not a fixture-level
+# declaration). This fixture's expected.selections therefore reflect
+# the UNSCOPED behavior — it's a regression anchor for the full-repo
+# baseline. Scope semantics are covered by the CLI-integration tests in
+# internal/cli/scope_test.go.
+
+task: |
+  Update Invoice.Finalize in services/billing/internal/invoice.go.
+
+budget: 200000
+model: claude-sonnet-4-6
+
+repo_fingerprint: sha256:3795e819305113879a526f253b7ed9606829a7ebf1dfb63ef7cce0698d08e4be
+
+expected:
+  selections:
+    - path: services/billing/internal/invoice.go

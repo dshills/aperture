@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-04-18T17:23:52Z",
+  "generated_at": "2026-04-18T17:53:53Z",
   "aperture_version": "dev",
   "selection_logic_version": "sel-v2",
   "fixtures": {
@@ -13,6 +13,11 @@
       "precision": 1,
       "recall": 0,
       "f1": 0
+    },
+    "monorepo-scope": {
+      "precision": 0.5,
+      "recall": 1,
+      "f1": 0.6666666666666666
     },
     "trivial-fail": {
       "precision": 0,

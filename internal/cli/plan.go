@@ -28,6 +28,8 @@ type planFlags struct {
 	minFeasibilitySet bool // captured from cmd.Flags().Changed to allow --min-feasibility 0 to disable a config threshold
 	configPath        string
 	verbose           bool
+	scope             string
+	scopeSet          bool // captured via cmd.Flags().Changed so the sentinel "" can unset a config scope
 }
 
 func newPlanCommand() *cobra.Command {
@@ -47,6 +49,7 @@ func newPlanCommand() *cobra.Command {
 			// so --min-feasibility 0 can disable a config-level threshold
 			// (rather than silently falling back to it).
 			f.minFeasibilitySet = cmd.Flags().Changed("min-feasibility")
+			f.scopeSet = cmd.Flags().Changed("scope")
 			return runPlan(cmd, args, f)
 		},
 	}
@@ -60,11 +63,12 @@ func newPlanCommand() *cobra.Command {
 	cmd.Flags().Float64Var(&f.minFeasibility, "min-feasibility", 0.0, "Exit 7 if feasibility < threshold")
 	cmd.Flags().StringVar(&f.configPath, "config", "", "Path to .aperture.yaml (default: <repo>/.aperture.yaml)")
 	cmd.Flags().BoolVar(&f.verbose, "verbose", false, "Emit extra diagnostics to stderr (dampener factors, etc.)")
+	cmd.Flags().StringVar(&f.scope, "scope", "", "Restrict candidate generation to this repo-relative subtree (\"\" or \".\" unsets any config scope)")
 	return cmd
 }
 
 func runPlan(_ *cobra.Command, args []string, f planFlags) error {
-	prep, err := preparePlan(f.repo, args, f.inline, f.configPath)
+	prep, err := preparePlan(f.repo, args, f.inline, f.configPath, scopeFlagInputs{Value: f.scope, Set: f.scopeSet})
 	if err != nil {
 		return err
 	}
@@ -80,6 +84,7 @@ func runPlan(_ *cobra.Command, args []string, f planFlags) error {
 		Exclusions:  prep.Exclusions,
 		Index:       prep.PipelineRes.Index,
 		Verbose:     f.verbose,
+		Scope:       prep.Scope,
 	})
 	// BuildManifest returns (manifest, ExitCodeError) on underflow — we
 	// still emit the manifest body, then propagate the exit code.
@@ -158,6 +163,12 @@ type buildInputs struct {
 	// Verbose enables stderr diagnostic logging (SPEC §8.4). Default
 	// false keeps BuildManifest byte-identical and silent.
 	Verbose bool
+	// Scope, when IsSet, is the v1.1 §7.4.4 projection: candidates
+	// outside the scope path (except admissible supplementals) are
+	// filtered out before scoring, ambiguous_ownership peer-count
+	// is restricted to in-scope files, and s_import pass-2 only
+	// considers in-scope target packages. Zero value means no scope.
+	Scope repo.Scope
 }
 
 // userOnly returns the config's user-added exclude patterns — i.e. cfg.Exclude

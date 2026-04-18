@@ -34,6 +34,11 @@ type Defaults struct {
 	Model   string  `yaml:"model" json:"model"`
 	Budget  int     `yaml:"budget" json:"budget"`
 	Reserve Reserve `yaml:"reserve" json:"reserve"`
+	// Scope is the default v1.1 §7.4.4 / §7.4.5 scope applied to
+	// every plan invocation against this repo. Empty string means
+	// "no default scope". A CLI `--scope` overrides; CLI sentinels
+	// ("" or ".") explicitly unset any config-declared scope.
+	Scope string `yaml:"scope" json:"scope"`
 }
 
 type Reserve struct {
@@ -175,6 +180,7 @@ type rawDefaults struct {
 	Model   *string  `yaml:"model"`
 	Budget  *int     `yaml:"budget"`
 	Reserve *Reserve `yaml:"reserve"`
+	Scope   *string  `yaml:"scope"`
 }
 
 type rawScoring struct {
@@ -203,6 +209,9 @@ func (r rawConfig) merge(base Config) (Config, error) {
 		}
 		if r.Defaults.Reserve != nil {
 			base.Defaults.Reserve = *r.Defaults.Reserve
+		}
+		if r.Defaults.Scope != nil {
+			base.Defaults.Scope = *r.Defaults.Scope
 		}
 	}
 	if r.DisableDefaults != nil {

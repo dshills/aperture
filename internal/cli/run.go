@@ -26,6 +26,8 @@ type runFlags struct {
 	minFeasibility    float64
 	minFeasibilitySet bool
 	outDir            string
+	scope             string
+	scopeSet          bool
 }
 
 func newRunCommand() *cobra.Command {
@@ -47,6 +49,7 @@ agent. Exit codes follow SPEC §16:
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			f.minFeasibilitySet = cmd.Flags().Changed("min-feasibility")
+			f.scopeSet = cmd.Flags().Changed("scope")
 			return runRun(cmd.Context(), args, f)
 		},
 	}
@@ -58,6 +61,7 @@ agent. Exit codes follow SPEC §16:
 	cmd.Flags().BoolVar(&f.failOnGaps, "fail-on-gaps", false, "Exit 8 if any blocking gap is present")
 	cmd.Flags().Float64Var(&f.minFeasibility, "min-feasibility", 0.0, "Exit 7 if feasibility < threshold")
 	cmd.Flags().StringVar(&f.outDir, "out-dir", "", "Directory for persisted manifests (default: <repo>/.aperture/manifests)")
+	cmd.Flags().StringVar(&f.scope, "scope", "", "Restrict candidate generation to this repo-relative subtree (\"\" or \".\" unsets any config scope)")
 	return cmd
 }
 
@@ -78,7 +82,7 @@ func runRun(ctx context.Context, args []string, f runFlags) error {
 		return usageErr("TASK_FILE and -p/--prompt are mutually exclusive")
 	}
 
-	prep, err := preparePlan(f.repo, taskArgs, f.inline, f.configPath)
+	prep, err := preparePlan(f.repo, taskArgs, f.inline, f.configPath, scopeFlagInputs{Value: f.scope, Set: f.scopeSet})
 	if err != nil {
 		return err
 	}
@@ -100,6 +104,7 @@ func runRun(ctx context.Context, args []string, f runFlags) error {
 		Languages:   prep.Languages,
 		Exclusions:  prep.Exclusions,
 		Index:       prep.PipelineRes.Index,
+		Scope:       prep.Scope,
 	})
 	var ec *ExitCodeError
 	underflow := false

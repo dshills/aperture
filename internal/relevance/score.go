@@ -91,6 +91,17 @@ func ScoreWithOptions(idx *index.Index, t task.Task, w config.Weights, opts Opti
 			"doc":      sDoc(f, ctx),
 			"config":   sConfig(f, t, ctx),
 		}
+		// §7.4.2: supplemental files admitted under `--scope` but
+		// outside the scope subtree contribute only direction-
+		// independent signals. The scoring math is otherwise
+		// unchanged — the four zeroed factors drop out of combine()
+		// and other_max naturally.
+		if f.OutOfScope {
+			signals["symbol"] = 0
+			signals["package"] = 0
+			signals["test"] = 0
+			// s_import is computed in pass 2; zeroed there too.
+		}
 		damp := Dampen(OtherMaxForDampener(signals), ctx.dampener)
 		score := clamp01(combine(signals, w, damp))
 		pass1 = append(pass1, Scored{Path: f.Path, Score: score, Signals: signals, Dampener: damp})
@@ -116,13 +127,18 @@ func ScoreWithOptions(idx *index.Index, t task.Task, w config.Weights, opts Opti
 
 	// Pass 2: compute s_import and roll into final score. The dampener
 	// is recomputed because s_import is part of other_max (§7.2.2).
+	// §7.4.2: out-of-scope supplementals skip s_import (forced to 0).
 	out := make([]Scored, 0, len(pass1))
 	for _, entry := range pass1 {
 		f := idx.File(entry.Path)
 		if f == nil {
 			continue
 		}
-		entry.Signals["import"] = sImport(f, importCache, pkgScores, pkgImports)
+		if f.OutOfScope {
+			entry.Signals["import"] = 0
+		} else {
+			entry.Signals["import"] = sImport(f, importCache, pkgScores, pkgImports)
+		}
 		entry.Dampener = Dampen(OtherMaxForDampener(entry.Signals), ctx.dampener)
 		entry.Score = clamp01(combine(entry.Signals, w, entry.Dampener))
 		out = append(out, entry)
