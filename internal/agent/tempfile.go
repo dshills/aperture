@@ -20,33 +20,47 @@ const tempfilePrefix = "aperture-task-"
 const orphanAge = 24 * time.Hour
 
 // WriteInlineTaskFile writes body under $TMPDIR with the §7.10.4.1
-// inline-task naming convention and returns the absolute path. Callers
-// are responsible for deleting the file when the run completes — the
-// returned path AND a cleanup helper give both options.
-//
-// Security: $TMPDIR is a shared, world-writable directory on most
-// systems, and the §7.10.4.1 filename shape is deterministic for a
-// given manifest_id. To defeat symlink-attacks where an attacker pre-
-// creates the target path pointing at a sensitive file, we open with
-// O_CREATE|O_EXCL|O_WRONLY so the call fails if any entry (file,
-// symlink, directory) already exists at the path. On first conflict
-// we attempt one Remove + retry to tolerate a stale orphan from a
-// prior crashed invocation; a second failure surfaces the error.
+// inline-task naming convention and returns the absolute path. Thin
+// wrapper around WriteInlineTaskFileIn that defaults to os.TempDir();
+// callers that need to confine the write to an explicit directory
+// (tests, fuzz harnesses) should call the In variant directly to
+// avoid racing on the process-global $TMPDIR.
 func WriteInlineTaskFile(manifestID, body string) (string, func(), error) {
-	name := tempfilePrefix + sanitizeID(manifestID) + ".txt"
-	path := filepath.Join(os.TempDir(), name)
+	return WriteInlineTaskFileIn(os.TempDir(), manifestID, body)
+}
 
+// WriteInlineTaskFileIn is the directory-explicit form of
+// WriteInlineTaskFile. Always prefer this in tests — it sidesteps
+// os.Setenv("TMPDIR", …) which would race with parallel test
+// packages that read the same env var.
+//
+// Security: the target directory is typically $TMPDIR, a shared,
+// world-writable directory. The §7.10.4.1 filename shape is
+// deterministic for a given manifest_id, so we open with
+// O_CREATE|O_EXCL|O_WRONLY to defeat symlink attacks where a
+// crafted pre-existing entry at the target path would cause a
+// naive WriteFile to follow the link into a sensitive file. On a
+// first conflict we try one Remove + retry to tolerate a stale
+// orphan from a prior crashed run; a second failure surfaces the
+// error.
+func WriteInlineTaskFileIn(dir, manifestID, body string) (string, func(), error) {
+	name := tempfilePrefix + sanitizeID(manifestID) + ".txt"
+	path := filepath.Join(dir, name)
+
+	// Happy path: single O_EXCL create. Flatten the retry logic below
+	// so the three possible outcomes are obvious:
+	//   1. first write succeeds → fall through to cleanup assembly.
+	//   2. first write fails, but it's a stale orphan — Remove it and
+	//      retry once; any retry failure bubbles up.
+	//   3. first write fails AND Remove fails (permissions, or the
+	//      target is a non-writable directory) → return the original
+	//      error, never a fabricated success.
 	if err := writeTaskFileExcl(path, body); err != nil {
-		// One retry — the canonical case is a leftover file from a
-		// prior run that the orphan sweep hasn't reached yet. The
-		// remove is deliberately a non-symlink-following op so we
-		// don't follow an attacker's link into a sensitive target.
-		if removeErr := os.Remove(path); removeErr == nil {
-			if err2 := writeTaskFileExcl(path, body); err2 != nil {
-				return "", nil, err2
-			}
-		} else {
+		if removeErr := os.Remove(path); removeErr != nil {
 			return "", nil, err
+		}
+		if err2 := writeTaskFileExcl(path, body); err2 != nil {
+			return "", nil, err2
 		}
 	}
 	cleanup := func() {

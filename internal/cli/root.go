@@ -32,12 +32,28 @@ type ExitCodeError struct {
 	Err  error
 }
 
+// Error returns ONLY the inner message (or "exit N" as a fallback when
+// the inner is empty/nil). The numeric code is DELIBERATELY omitted
+// from the string form because cli.Execute prints errors via
+// `fmt.Fprintf(os.Stderr, "aperture: %s\n", err)` and then returns
+// e.Code via os.Exit — the shell's own "exit status N" line shows the
+// code once; prefixing the message with "exit N:" would duplicate it
+// on every failure. Programmatic callers read e.Code directly via
+// errors.As; the stdlib error-chain contract is preserved via Unwrap
+// below.
 func (e *ExitCodeError) Error() string {
-	if e.Err == nil {
-		return fmt.Sprintf("exit %d", e.Code)
+	if e.Err != nil {
+		if msg := e.Err.Error(); msg != "" {
+			return msg
+		}
 	}
-	return e.Err.Error()
+	return fmt.Sprintf("exit %d", e.Code)
 }
+
+// Unwrap returns the inner cause so errors.Is / errors.As can walk
+// through an ExitCodeError to inspect the underlying error. Without
+// this the stdlib wrap-chain stops at the ExitCodeError boundary.
+func (e *ExitCodeError) Unwrap() error { return e.Err }
 
 func exitErr(code int, err error) error {
 	return &ExitCodeError{Code: code, Err: err}
