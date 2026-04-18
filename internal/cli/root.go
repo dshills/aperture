@@ -77,6 +77,7 @@ func NewRoot() *cobra.Command {
 		newVersionCommand(),
 		newCacheCommand(),
 		newEvalCommand(),
+		newDiffCommand(),
 	)
 	return root
 }
