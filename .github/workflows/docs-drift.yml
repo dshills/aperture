@@ -36,7 +36,15 @@ jobs:
           cache: true
 
       - name: Install clarion
-        run: go install github.com/dshills/clarion/cmd/clarion@latest
+        # `go install github.com/dshills/clarion/...` fails the
+        # module-path check (repo at dshills/, go.mod declares
+        # clarion-dev/). Building from source is the clarion-
+        # documented install path and sidesteps the mismatch.
+        run: |
+          git clone --depth 1 https://github.com/dshills/clarion /tmp/clarion-src
+          make -C /tmp/clarion-src build
+          sudo install -m 0755 /tmp/clarion-src/bin/clarion /usr/local/bin/clarion
+          clarion --help >/dev/null
 
       - name: Run docs drift check
         run: |
