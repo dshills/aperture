@@ -5,3 +5,7 @@ dist/
 *.out
 .atlas
 .claude
+# Bench fixtures are generator-materialized (see `make bench-prepare`);
+# checking them in would bloat the repo without adding information.
+/testdata/bench/small/
+/testdata/bench/medium/

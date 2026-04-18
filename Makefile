@@ -1,4 +1,4 @@
-.PHONY: build test lint fmt bench
+.PHONY: build test lint fmt bench bench-prepare bench-clean
 
 VERSION ?= dev
 COMMIT := $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
@@ -20,5 +20,17 @@ lint:
 fmt:
 	gofmt -s -w .
 
-bench:
-	@echo "bench target: populated by Phase 6"
+# `make bench` drives the §8.2 harness. Requires `bench-prepare` to have
+# materialized the fixtures first; the target depends on `build` so the
+# binary under test is current.
+bench: build bench-prepare
+	go run ./cmd/apbench -bin ./bin/aperture -fixtures testdata/bench
+
+# Materializes testdata/bench/{small,medium}/. The fixtures themselves
+# are NOT committed (see .gitignore) — CI regenerates them on demand so
+# the repo stays small.
+bench-prepare:
+	go run ./cmd/apbenchfixtures -root testdata/bench
+
+bench-clean:
+	rm -rf testdata/bench/small testdata/bench/medium
