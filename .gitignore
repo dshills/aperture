@@ -1,0 +1,7 @@
+.aperture/
+bin/
+coverage/
+dist/
+*.out
+.atlas
+.claude

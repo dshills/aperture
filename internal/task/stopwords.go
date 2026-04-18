@@ -1,0 +1,32 @@
+package task
+
+// Frozen stopword list per §7.3.2 rule 4.
+var stopwords = map[string]struct{}{
+	"the":    {},
+	"and":    {},
+	"for":    {},
+	"with":   {},
+	"that":   {},
+	"this":   {},
+	"from":   {},
+	"into":   {},
+	"when":   {},
+	"then":   {},
+	"will":   {},
+	"must":   {},
+	"should": {},
+	"would":  {},
+	"could":  {},
+	"have":   {},
+	"make":   {},
+	"take":   {},
+	"need":   {},
+	"want":   {},
+	"user":   {},
+	"file":   {},
+	"code":   {},
+	"task":   {},
+	"they":   {},
+	"them":   {},
+	"their":  {},
+}

@@ -1,0 +1,40 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - depguard
+  settings:
+    depguard:
+      rules:
+        main:
+          list-mode: lax
+          deny:
+            - pkg: github.com/spf13/viper
+              desc: "config loading is implemented in-tree; viper is forbidden per §8.1.1"
+            - pkg: gopkg.in/yaml.v2
+              desc: "use gopkg.in/yaml.v3 only"
+            - pkg: github.com/sirupsen/logrus
+              desc: "use log/slog per §8.1.1"
+            - pkg: go.uber.org/zap
+              desc: "use log/slog per §8.1.1"
+            - pkg: github.com/rs/zerolog
+              desc: "use log/slog per §8.1.1"
+            - pkg: gorm.io/gorm
+              desc: "ORMs are forbidden per §8.1.1"
+            - pkg: github.com/jinzhu/gorm
+              desc: "ORMs are forbidden per §8.1.1"
+            - pkg: entgo.io/ent
+              desc: "ORMs are forbidden per §8.1.1"
+            - pkg: github.com/go-resty/resty/v2
+              desc: "use net/http per §8.1.1"
+            - pkg: github.com/hashicorp/go-retryablehttp
+              desc: "use net/http per §8.1.1"

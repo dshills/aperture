@@ -1,0 +1,351 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aperture.dev/schema/manifest.v1.json",
+  "title": "Aperture Manifest v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "manifest_id",
+    "manifest_hash",
+    "generated_at",
+    "incomplete",
+    "task",
+    "repo",
+    "budget",
+    "selections",
+    "reachable",
+    "exclusions",
+    "gaps",
+    "feasibility",
+    "generation_metadata"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "manifest_id": {
+      "type": "string",
+      "pattern": "^apt_[0-9a-f]{16}$"
+    },
+    "manifest_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "incomplete": {
+      "type": "boolean"
+    },
+    "task": {
+      "type": "object",
+      "required": [
+        "task_id",
+        "source",
+        "raw_text",
+        "type",
+        "objective",
+        "anchors",
+        "expects_tests",
+        "expects_config",
+        "expects_docs",
+        "expects_migration",
+        "expects_api_contract"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "task_id": {
+          "type": "string",
+          "pattern": "^tsk_[0-9a-f]{16}$"
+        },
+        "source": {
+          "type": "string"
+        },
+        "raw_text": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "bugfix",
+            "feature",
+            "refactor",
+            "test-addition",
+            "documentation",
+            "investigation",
+            "migration",
+            "unknown"
+          ]
+        },
+        "objective": {
+          "type": "string"
+        },
+        "anchors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "expects_tests": {
+          "type": "boolean"
+        },
+        "expects_config": {
+          "type": "boolean"
+        },
+        "expects_docs": {
+          "type": "boolean"
+        },
+        "expects_migration": {
+          "type": "boolean"
+        },
+        "expects_api_contract": {
+          "type": "boolean"
+        }
+      }
+    },
+    "repo": {
+      "type": "object",
+      "required": ["root", "fingerprint", "language_hints"],
+      "additionalProperties": false,
+      "properties": {
+        "root": {"type": "string"},
+        "fingerprint": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$|^$"
+        },
+        "language_hints": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "required": [
+        "model",
+        "token_ceiling",
+        "reserved",
+        "effective_context_budget",
+        "estimated_selected_tokens",
+        "estimator",
+        "estimator_version"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "model": {"type": "string"},
+        "token_ceiling": {"type": "integer", "minimum": 0},
+        "reserved": {
+          "type": "object",
+          "required": ["instructions", "reasoning", "tool_output", "expansion"],
+          "additionalProperties": false,
+          "properties": {
+            "instructions": {"type": "integer", "minimum": 0},
+            "reasoning": {"type": "integer", "minimum": 0},
+            "tool_output": {"type": "integer", "minimum": 0},
+            "expansion": {"type": "integer", "minimum": 0}
+          }
+        },
+        "effective_context_budget": {"type": "integer"},
+        "estimated_selected_tokens": {"type": "integer", "minimum": 0},
+        "estimator": {"type": "string"},
+        "estimator_version": {"type": "string"}
+      }
+    },
+    "selections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "kind",
+          "load_mode",
+          "relevance_score",
+          "score_breakdown",
+          "estimated_tokens",
+          "rationale",
+          "side_effects"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "path": {"type": "string"},
+          "kind": {"type": "string", "enum": ["file"]},
+          "load_mode": {
+            "type": "string",
+            "enum": ["full", "structural_summary", "behavioral_summary"]
+          },
+          "relevance_score": {"type": "number", "minimum": 0, "maximum": 1},
+          "score_breakdown": {
+            "type": "array",
+            "items": {"$ref": "#/$defs/breakdownEntry"}
+          },
+          "estimated_tokens": {"type": "integer", "minimum": 0},
+          "rationale": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "demotion_reason": {
+            "type": ["string", "null"]
+          },
+          "side_effects": {
+            "type": ["array", "null"],
+            "items": {"type": "string"}
+          }
+        }
+      }
+    },
+    "reachable": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "relevance_score", "reason", "score_breakdown"],
+        "additionalProperties": false,
+        "properties": {
+          "path": {"type": "string"},
+          "relevance_score": {"type": "number", "minimum": 0, "maximum": 1},
+          "reason": {"type": "string"},
+          "score_breakdown": {
+            "type": "array",
+            "items": {"$ref": "#/$defs/breakdownEntry"}
+          }
+        }
+      }
+    },
+    "exclusions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "path": {"type": "string"},
+          "reason": {
+            "type": "string",
+            "enum": [
+              "default_pattern",
+              "user_pattern",
+              "binary",
+              "oversize_cutoff",
+              "hidden_dir",
+              "symlink"
+            ]
+          }
+        }
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "severity",
+          "description",
+          "evidence",
+          "suggested_remediation"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^gap-[0-9]+$"},
+          "type": {
+            "type": "string",
+            "enum": [
+              "missing_spec",
+              "missing_tests",
+              "missing_config_context",
+              "unresolved_symbol_dependency",
+              "ambiguous_ownership",
+              "missing_runtime_path",
+              "missing_external_contract",
+              "oversized_primary_context",
+              "task_underspecified"
+            ]
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["info", "warning", "blocking"]
+          },
+          "description": {"type": "string"},
+          "evidence": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "suggested_remediation": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        }
+      }
+    },
+    "feasibility": {
+      "type": "object",
+      "required": [
+        "score",
+        "assessment",
+        "positives",
+        "negatives",
+        "blocking_conditions",
+        "sub_signals"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "score": {"type": "number", "minimum": 0, "maximum": 1},
+        "assessment": {"type": "string"},
+        "positives": {"type": "array", "items": {"type": "string"}},
+        "negatives": {"type": "array", "items": {"type": "string"}},
+        "blocking_conditions": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "sub_signals": {
+          "type": "object",
+          "additionalProperties": {"type": "number"}
+        }
+      }
+    },
+    "generation_metadata": {
+      "type": "object",
+      "required": [
+        "aperture_version",
+        "selection_logic_version",
+        "config_digest",
+        "side_effect_tables_version",
+        "host",
+        "pid",
+        "wall_clock_started_at"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "aperture_version": {"type": "string"},
+        "selection_logic_version": {"type": "string"},
+        "config_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "side_effect_tables_version": {"type": "string"},
+        "host": {"type": "string"},
+        "pid": {"type": "integer", "minimum": 0},
+        "wall_clock_started_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "breakdownEntry": {
+      "type": "object",
+      "required": ["factor", "signal", "weight", "contribution"],
+      "additionalProperties": false,
+      "properties": {
+        "factor": {"type": "string"},
+        "signal": {"type": "number"},
+        "weight": {"type": "number"},
+        "contribution": {"type": "number"}
+      }
+    }
+  }
+}

@@ -1,0 +1,2 @@
+Fix the broken pagination offset in internal/api/list.go — the cursor
+is decoded incorrectly when the page parameter is negative.
