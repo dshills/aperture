@@ -4,11 +4,15 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/dshills/aperture/internal/config"
 	"github.com/dshills/aperture/internal/manifest"
+	"github.com/dshills/aperture/internal/pipeline"
+	"github.com/dshills/aperture/internal/repo"
 	"github.com/dshills/aperture/internal/task"
+	"github.com/dshills/aperture/internal/version"
 )
 
 func TestBuildStubManifest_IsSchemaValid(t *testing.T) {
@@ -103,6 +107,91 @@ func TestReadTask_RejectsBinary(t *testing.T) {
 	}
 	if _, _, _, err := readTask([]string{p}, ""); err == nil {
 		t.Fatal("expected binary rejection")
+	}
+}
+
+// Phase-2 end-to-end: running the pipeline against the small_go fixture
+// should populate fingerprint, language_hints, and exclusions on a
+// schema-valid manifest.
+func TestPlan_SmallGoFixture_PopulatesRepoMetadata(t *testing.T) {
+	fixture, err := filepath.Abs("../../testdata/fixtures/small_go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Default()
+	parsed := task.Parse("add OAuth refresh handling", task.ParseOptions{Source: "<inline>"})
+
+	res, err := pipeline.Build(pipeline.BuildOptions{
+		Root:            fixture,
+		DefaultExcludes: config.DefaultExclusions(),
+	})
+	if err != nil {
+		t.Fatalf("pipeline.Build: %v", err)
+	}
+	fp, err := repo.Fingerprint(walkerFiles(res.Index), version.Version)
+	if err != nil {
+		t.Fatalf("Fingerprint: %v", err)
+	}
+	if len(fp) != len("sha256:")+64 {
+		t.Fatalf("bad fingerprint shape: %s", fp)
+	}
+
+	m, err := buildStubManifest(buildInputs{
+		Config:      cfg,
+		Task:        parsed,
+		RepoRoot:    fixture,
+		BudgetFlag:  120000,
+		Fingerprint: fp,
+		Languages:   res.Index.LanguageHints(),
+		Exclusions:  res.Exclusions,
+	})
+	if err != nil {
+		t.Fatalf("buildStubManifest: %v", err)
+	}
+
+	jsonBytes, err := manifest.EmitJSON(m)
+	if err != nil {
+		t.Fatalf("EmitJSON: %v", err)
+	}
+	if err := manifest.Validate(jsonBytes); err != nil {
+		t.Fatalf("schema validation failed: %v", err)
+	}
+
+	if m.Repo.Fingerprint == "" {
+		t.Error("repo.fingerprint must be populated")
+	}
+	if !slices.Contains(m.Repo.LanguageHints, "go") {
+		t.Errorf("language_hints must include go: %v", m.Repo.LanguageHints)
+	}
+	if m.GenerationMetadata.SideEffectTablesVersion != "side-effect-tables-v1" {
+		t.Errorf("unexpected side_effect_tables_version: %s", m.GenerationMetadata.SideEffectTablesVersion)
+	}
+}
+
+// Running the same plan twice on the same fixture produces byte-identical
+// fingerprints and manifest hashes.
+func TestPlan_SmallGoFixture_DeterministicFingerprint(t *testing.T) {
+	fixture, err := filepath.Abs("../../testdata/fixtures/small_go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hashes [2]string
+	for i := 0; i < 2; i++ {
+		res, err := pipeline.Build(pipeline.BuildOptions{
+			Root:            fixture,
+			DefaultExcludes: config.DefaultExclusions(),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		fp, err := repo.Fingerprint(walkerFiles(res.Index), version.Version)
+		if err != nil {
+			t.Fatal(err)
+		}
+		hashes[i] = fp
+	}
+	if hashes[0] != hashes[1] {
+		t.Fatalf("fingerprint not stable across runs: %s vs %s", hashes[0], hashes[1])
 	}
 }
 

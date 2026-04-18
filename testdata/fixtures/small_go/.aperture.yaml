@@ -1,0 +1,4 @@
+version: 1
+defaults:
+  model: claude-sonnet
+  budget: 120000

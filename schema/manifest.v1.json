@@ -229,7 +229,8 @@
               "binary",
               "oversize_cutoff",
               "hidden_dir",
-              "symlink"
+              "symlink",
+              "read_error"
             ]
           }
         }

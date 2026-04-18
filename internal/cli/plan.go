@@ -12,7 +12,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/dshills/aperture/internal/config"
+	"github.com/dshills/aperture/internal/index"
 	"github.com/dshills/aperture/internal/manifest"
+	"github.com/dshills/aperture/internal/pipeline"
+	"github.com/dshills/aperture/internal/repo"
 	"github.com/dshills/aperture/internal/task"
 	"github.com/dshills/aperture/internal/version"
 )
@@ -82,12 +85,29 @@ func runPlan(_ *cobra.Command, args []string, f planFlags) error {
 
 	parsed := task.Parse(rawText, task.ParseOptions{Source: source, IsMarkdown: isMarkdown})
 
+	res, err := pipeline.Build(pipeline.BuildOptions{
+		Root:            repoRoot,
+		DefaultExcludes: config.DefaultExclusions(),
+		UserExcludes:    userOnly(cfg),
+	})
+	if err != nil {
+		return exitErr(1, fmt.Errorf("index build: %w", err))
+	}
+
+	fingerprint, err := repo.Fingerprint(walkerFiles(res.Index), version.Version)
+	if err != nil {
+		return exitErr(1, fmt.Errorf("fingerprint: %w", err))
+	}
+
 	m, err := buildStubManifest(buildInputs{
-		Config:     cfg,
-		Task:       parsed,
-		RepoRoot:   repoRoot,
-		ModelFlag:  f.model,
-		BudgetFlag: f.budget,
+		Config:      cfg,
+		Task:        parsed,
+		RepoRoot:    repoRoot,
+		ModelFlag:   f.model,
+		BudgetFlag:  f.budget,
+		Fingerprint: fingerprint,
+		Languages:   res.Index.LanguageHints(),
+		Exclusions:  res.Exclusions,
 	})
 	if err != nil {
 		return exitErr(1, err)
@@ -118,11 +138,70 @@ func runPlan(_ *cobra.Command, args []string, f planFlags) error {
 }
 
 type buildInputs struct {
-	Config     config.Config
-	Task       task.Task
-	RepoRoot   string
-	ModelFlag  string
-	BudgetFlag int
+	Config      config.Config
+	Task        task.Task
+	RepoRoot    string
+	ModelFlag   string
+	BudgetFlag  int
+	Fingerprint string
+	Languages   []string
+	Exclusions  []repo.Exclusion
+}
+
+// userOnly returns the config's user-added exclude patterns — i.e. cfg.Exclude
+// minus the built-in defaults — so the pipeline can report them under the
+// "user_pattern" reason without double-matching a default pattern against the
+// same file.
+func userOnly(cfg config.Config) []string {
+	defaults := config.DefaultExclusions()
+	skip := make(map[string]struct{}, len(defaults))
+	for _, d := range defaults {
+		skip[d] = struct{}{}
+	}
+	out := make([]string, 0, len(cfg.Exclude))
+	for _, p := range cfg.Exclude {
+		if _, isDefault := skip[p]; isDefault {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+// manifestExclusions translates the walker's exclusion log into the
+// manifest-native Exclusion shape; ordering is preserved (the walker
+// already sorted by path then reason).
+func manifestExclusions(in []repo.Exclusion) []manifest.Exclusion {
+	out := make([]manifest.Exclusion, 0, len(in))
+	for _, e := range in {
+		out = append(out, manifest.Exclusion{Path: e.Path, Reason: string(e.Reason)})
+	}
+	return out
+}
+
+// langHintsOrEmpty makes sure the manifest carries [] rather than nil when
+// no language tags were detected, keeping the JSON schema happy.
+func langHintsOrEmpty(in []string) []string {
+	if in == nil {
+		return []string{}
+	}
+	return in
+}
+
+// walkerFiles extracts the subset of fields the fingerprinter consumes
+// from the assembled Index. Kept in CLI so the pipeline package doesn't
+// need to leak repo.FileEntry to its callers.
+func walkerFiles(idx *index.Index) []repo.FileEntry {
+	out := make([]repo.FileEntry, 0, len(idx.Files))
+	for _, f := range idx.Files {
+		out = append(out, repo.FileEntry{
+			Path:   f.Path,
+			Size:   f.Size,
+			SHA256: f.SHA256,
+			MTime:  f.MTime,
+		})
+	}
+	return out
 }
 
 // buildStubManifest produces a Phase-1 manifest: populated task + deterministic
@@ -182,8 +261,8 @@ func buildStubManifest(in buildInputs) (*manifest.Manifest, error) {
 		},
 		Repo: manifest.Repo{
 			Root:          in.RepoRoot,
-			Fingerprint:   "",
-			LanguageHints: []string{},
+			Fingerprint:   in.Fingerprint,
+			LanguageHints: langHintsOrEmpty(in.Languages),
 		},
 		Budget: manifest.Budget{
 			Model:        resolvedModel,
@@ -201,7 +280,7 @@ func buildStubManifest(in buildInputs) (*manifest.Manifest, error) {
 		},
 		Selections: []manifest.Selection{},
 		Reachable:  []manifest.Reachable{},
-		Exclusions: []manifest.Exclusion{},
+		Exclusions: manifestExclusions(in.Exclusions),
 		Gaps:       []manifest.Gap{},
 		Feasibility: manifest.Feasibility{
 			Score:              0.0,
@@ -239,25 +318,27 @@ func resolveEstimator(cliModel, cfgModel string) (string, string) {
 }
 
 func resolveRepoRoot(flag string) (string, error) {
-	if flag == "" {
-		cwd, err := os.Getwd()
+	if flag != "" {
+		// Explicit --repo is honored verbatim per SPEC §7.1.2 — the user
+		// takes responsibility for pointing at the right directory.
+		abs, err := filepath.Abs(flag)
 		if err != nil {
-			return "", fmt.Errorf("getwd: %w", err)
+			return "", fmt.Errorf("resolve --repo: %w", err)
 		}
-		return cwd, nil
+		fi, err := os.Stat(abs)
+		if err != nil {
+			return "", fmt.Errorf("stat --repo: %w", err)
+		}
+		if !fi.IsDir() {
+			return "", fmt.Errorf("--repo %q is not a directory", abs)
+		}
+		return abs, nil
 	}
-	abs, err := filepath.Abs(flag)
+	cwd, err := os.Getwd()
 	if err != nil {
-		return "", fmt.Errorf("resolve --repo: %w", err)
+		return "", fmt.Errorf("getwd: %w", err)
 	}
-	fi, err := os.Stat(abs)
-	if err != nil {
-		return "", fmt.Errorf("stat --repo: %w", err)
-	}
-	if !fi.IsDir() {
-		return "", fmt.Errorf("--repo %q is not a directory", abs)
-	}
-	return abs, nil
+	return repo.DiscoverRoot(cwd)
 }
 
 func readTask(args []string, inline string) (rawText, source string, isMarkdown bool, err error) {
