@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aperture.dev/schema/fixture.v1.json",
+  "title": "Aperture Eval Fixture v1",
+  "description": "Schema for *.eval.yaml fixture files consumed by `aperture eval run` (SPEC §7.1.1). Validated at load time; unknown keys are rejected.",
+  "type": "object",
+  "required": ["name", "budget", "model", "repo_fingerprint"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Fixture identifier. Becomes the test-case id in reports."
+    },
+    "task": {
+      "type": "string",
+      "description": "Inline task text. Mutually exclusive with task_file."
+    },
+    "task_file": {
+      "type": "string",
+      "description": "Path under repo/ whose contents are the task. Mutually exclusive with task."
+    },
+    "budget": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Token budget (v1 §6.3 units)."
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1
+    },
+    "repo_fingerprint": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "selections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path"],
+            "additionalProperties": false,
+            "properties": {
+              "path": { "type": "string", "minLength": 1 },
+              "load_mode": {
+                "type": "string",
+                "enum": ["full", "structural_summary", "behavioral_summary", "reachable"]
+              }
+            }
+          }
+        },
+        "forbidden": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path"],
+            "additionalProperties": false,
+            "properties": {
+              "path": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "gaps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["type"],
+            "additionalProperties": false,
+            "properties": {
+              "type": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "agent_check": {
+      "type": "object",
+      "required": ["command", "timeout"],
+      "additionalProperties": false,
+      "properties": {
+        "command": { "type": "string", "minLength": 1 },
+        "timeout": {
+          "type": "string",
+          "description": "Duration string parseable by Go's time.ParseDuration (e.g. \"30s\"). Bare integers are NOT accepted."
+        }
+      }
+    }
+  },
+  "oneOf": [
+    { "required": ["task"] },
+    { "required": ["task_file"] }
+  ]
+}

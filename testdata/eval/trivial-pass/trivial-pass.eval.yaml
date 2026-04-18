@@ -1,0 +1,17 @@
+name: trivial-pass
+
+# Inline task that names both the file and the exported symbol so every
+# scoring factor fires on cmd/sample/main.go. The fixture's sole purpose
+# is to confirm end-to-end plumbing works — it is NOT a scoring-quality
+# benchmark.
+task: |
+  Update the Greet function in cmd/sample/main.go to include a timestamp.
+
+budget: 200000
+model: claude-sonnet-4-6
+
+repo_fingerprint: sha256:2ffe1291b3ce6be7aa8316d571b6b77919cb7a6f13086b7b487240d650b87fd5
+
+expected:
+  selections:
+    - path: cmd/sample/main.go

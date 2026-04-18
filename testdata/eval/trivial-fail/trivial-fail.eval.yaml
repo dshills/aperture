@@ -1,0 +1,23 @@
+name: trivial-fail
+
+# Structurally-unpassable fixture — PLAN §11: `trivial-fail` exists so
+# the harness's failure-detection path has a stable reference case that
+# cannot be accidentally "fixed" by a future planner improvement.
+#
+# The expected selection below names a path that does NOT exist in this
+# fixture's repo/ snapshot, so the planner can never select it and the
+# fixture's recall against this expected set is permanently 0 (and F1
+# permanently 0). The baseline.json records that F1=0 as the reference
+# value for the fixture — so `eval run` exits 0 here; only DROPS below
+# the baseline register as regressions.
+task: |
+  Touch up cmd/sample/main.go so it does something useful.
+
+budget: 200000
+model: claude-sonnet-4-6
+
+repo_fingerprint: sha256:471ce49110da6c33c3e8e5bc9a57b92c601b99410763b0872f8b690037cbfe31
+
+expected:
+  selections:
+    - path: internal/definitely_not_here.go
