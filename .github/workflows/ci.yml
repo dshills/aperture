@@ -34,12 +34,14 @@ jobs:
       - name: go vet
         run: go vet ./...
       - name: install golangci-lint
-        # Pin both the action major version and the tool minor
-        # version so lint upgrades land via intentional bumps
-        # rather than a surprise CI failure on a rule change.
+        # The repo's .golangci.yml uses the v2 config schema
+        # (`version: "2"`), so the tool must be v2.x. v1.x
+        # rejects the config with "invalid elements". Pinned to
+        # v2.1.6 so a lint-rule upgrade lands as an explicit
+        # bump in this file rather than a surprise CI break.
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.60
+          version: v2.1.6
       - name: go test
         run: go test ./...
       - name: go test -race (eval + cli + pipeline + selection)
@@ -100,8 +102,13 @@ jobs:
         with:
           go-version: "1.23"
           cache: true
+      - name: install ripgrep
+        # Not preinstalled on the ubuntu-latest runner despite
+        # common assumption — the aperture eval ripgrep command
+        # exits 1 with "rg binary not found on PATH" without this
+        # step.
+        run: sudo apt-get update -qq && sudo apt-get install -y ripgrep
       - name: aperture eval ripgrep
-        # ripgrep is preinstalled on ubuntu-latest runners.
         # `make eval-ripgrep` wraps the command so the binary
         # path stays in sync with the Makefile's BINARY_NAME
         # logic. Informational only — gating on §12.2's 1.2×

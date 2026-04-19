@@ -3,11 +3,15 @@
 # required because tier-2 analysis links the tree-sitter C runtime
 # through github.com/smacker/go-tree-sitter (PLAN §Phase 4).
 #
-# Supported targets (PLAN §Phase 4):
-#   linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64
-#
-# Cross-compiles use zig as a cgo toolchain so x86_64 runners can
-# produce arm64 and Windows binaries without a native builder.
+# rc0 smoke-test scope: Linux amd64 only. The PLAN §Phase 4
+# five-target matrix (darwin/amd64, darwin/arm64, linux/arm64,
+# windows/amd64) needs native per-OS runners or a properly-
+# configured goreleaser-cross toolchain. zig-as-CC from
+# ubuntu-latest can't cross-compile Go+CGo to darwin cleanly
+# (the Go toolchain passes `-arch` flags zig rejects for its
+# `x86_64-unknown-linux-gnu` default target). Expanding to the
+# full matrix is a follow-up release-engineering task for
+# v1.1.0-stable.
 version: 2
 
 project_name: aperture
@@ -24,15 +28,8 @@ builds:
       - CGO_ENABLED=1
     goos:
       - linux
-      - darwin
-      - windows
     goarch:
       - amd64
-      - arm64
-    ignore:
-      # Windows/arm64 is not in PLAN §Phase 4's supported matrix.
-      - goos: windows
-        goarch: arm64
     ldflags:
       - -s -w
       - -X github.com/dshills/aperture/internal/version.Version={{ .Version }}

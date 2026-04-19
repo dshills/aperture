@@ -2,8 +2,14 @@ name: release
 
 # Runs on tag pushes and on manual dispatch for snapshot releases.
 # CGo is required because tier-2 analysis (§7.3) links the
-# tree-sitter C runtime. The matrix builds the five supported
-# PLAN §Phase 4 targets; cross-compiles use zig-as-cc.
+# tree-sitter C runtime.
+#
+# rc0 smoke-test scope: linux/amd64 only — the PLAN §Phase 4
+# five-target matrix needs native per-OS runners or a properly
+# configured cross-compile toolchain; zig-as-CC from a linux
+# runner can't emit darwin binaries cleanly because the Go
+# toolchain passes `-arch` flags zig rejects for its default
+# `x86_64-unknown-linux-gnu` target.
 on:
   push:
     tags:
@@ -30,11 +36,10 @@ jobs:
         with:
           go-version: "1.23"
           check-latest: false
-      - name: Install zig (cgo cross-compile toolchain)
-        uses: mlugg/setup-zig@v1
-        with:
-          version: 0.13.0
       - name: Goreleaser
+        # Native linux/amd64 build — no zig / no cross-compile
+        # for rc0. Expanding to the full §Phase 4 matrix is a
+        # follow-up task.
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
@@ -42,9 +47,4 @@ jobs:
           args: ${{ github.event.inputs.snapshot == 'true' && 'release --snapshot --clean' || 'release --clean' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Force CGo on so tier-2 tree-sitter bindings compile.
           CGO_ENABLED: "1"
-          # Point Go at zig for cross-compiles. The matrix inside
-          # .goreleaser.yml handles the GOOS/GOARCH permutations.
-          CC: "zig cc"
-          CXX: "zig c++"
