@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aperture.dev/schema/loadmode.v1.json",
+  "title": "Aperture Load-Mode Calibration Report v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "aperture_version",
+    "selection_logic_version",
+    "fixtures_dir",
+    "fixtures",
+    "advisory",
+    "per_run_metadata"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "aperture_version": { "type": "string" },
+    "selection_logic_version": { "type": "string" },
+    "fixtures_dir": { "type": "string" },
+    "fixtures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "declares_agent_check", "plan_a_manifest_hash", "plan_b_manifest_hash", "symbolic_diff"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "declares_agent_check": { "type": "boolean" },
+          "error": { "type": "string" },
+          "plan_a_manifest_hash": { "type": "string" },
+          "plan_b_manifest_hash": { "type": "string" },
+          "symbolic_diff": {
+            "type": "object",
+            "required": [
+              "DemotedInA",
+              "TokensGainedByForcing",
+              "FeasibilityDelta",
+              "ForcedFullWouldUnderflow",
+              "BudgetOverflowTokens"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "DemotedInA": {
+                "type": ["array", "null"],
+                "items": {
+                  "type": "object",
+                  "required": ["Path", "ScoreA", "TokenCount"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "Path": { "type": "string" },
+                    "ScoreA": { "type": "number" },
+                    "TokenCount": { "type": "integer" }
+                  }
+                }
+              },
+              "TokensGainedByForcing": { "type": "integer" },
+              "FeasibilityDelta": { "type": "number" },
+              "GapsFiredInAOnly": { "type": ["array", "null"], "items": { "type": "string" } },
+              "GapsFiredInBOnly": { "type": ["array", "null"], "items": { "type": "string" } },
+              "ForcedFullWouldUnderflow": { "type": "boolean" },
+              "BudgetOverflowTokens": { "type": "integer" }
+            }
+          },
+          "agent_check_plan_a": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "outcome": { "type": "string", "enum": ["pass", "fail", "timeout", "not_found", "canceled"] },
+              "exit_code": { "type": "integer" },
+              "duration_ms": { "type": "integer" }
+            }
+          },
+          "agent_check_plan_b": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "outcome": { "type": "string", "enum": ["pass", "fail", "timeout", "not_found", "canceled"] },
+              "exit_code": { "type": "integer" },
+              "duration_ms": { "type": "integer" }
+            }
+          },
+          "delta": {
+            "type": "string",
+            "enum": ["IMPROVEMENT", "REGRESSION", "NO_CHANGE_PASS", "NO_CHANGE_FAIL"]
+          }
+        }
+      }
+    },
+    "advisory": {
+      "type": "object",
+      "required": ["Emit", "PassRateAPP", "PassRateBPP", "DeltaPP", "BumpPercent"],
+      "additionalProperties": false,
+      "properties": {
+        "Emit": { "type": "boolean" },
+        "PassRateAPP": { "type": "number" },
+        "PassRateBPP": { "type": "number" },
+        "DeltaPP": { "type": "number" },
+        "Message": { "type": "string" },
+        "BumpPercent": { "type": "integer" }
+      }
+    },
+    "per_run_metadata": {
+      "type": "object",
+      "required": ["generated_at", "wall_clock_duration_ms", "host", "pid", "aperture_version"],
+      "additionalProperties": false,
+      "properties": {
+        "generated_at": { "type": "string" },
+        "wall_clock_duration_ms": { "type": "integer" },
+        "host": { "type": "string" },
+        "pid": { "type": "integer" },
+        "aperture_version": { "type": "string" }
+      }
+    }
+  }
+}

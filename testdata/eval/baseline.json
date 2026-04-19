@@ -1,9 +1,14 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-04-18T19:34:47Z",
+  "generated_at": "2026-04-19T10:59:29Z",
   "aperture_version": "dev",
   "selection_logic_version": "sel-v2",
   "fixtures": {
+    "loadmode-smoke": {
+      "precision": 1,
+      "recall": 1,
+      "f1": 1
+    },
     "mention-dampener-counter-example": {
       "precision": 1,
       "recall": 1,

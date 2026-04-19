@@ -29,15 +29,20 @@ func jsonMarshal(v any) ([]byte, error) {
 	return json.MarshalIndent(v, "", "  ")
 }
 
-// newEvalCommand wires `aperture eval {run,baseline,ripgrep}` per v1.1
-// SPEC §4.1-§4.4. The `loadmode` subcommand is added in Phase 6.
+// newEvalCommand wires `aperture eval {run,baseline,ripgrep,loadmode}`
+// per v1.1 SPEC §4.1-§4.4 and §7.5.1.
 func newEvalCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "eval",
 		Short: "Selection-quality harness",
 		Long:  "Regression-test the planner against committed fixtures (v1.1 SPEC §4.1-§4.4).",
 	}
-	cmd.AddCommand(newEvalRunCommand(), newEvalBaselineCommand(), newEvalRipgrepCommand())
+	cmd.AddCommand(
+		newEvalRunCommand(),
+		newEvalBaselineCommand(),
+		newEvalRipgrepCommand(),
+		newEvalLoadmodeCommand(),
+	)
 	return cmd
 }
 

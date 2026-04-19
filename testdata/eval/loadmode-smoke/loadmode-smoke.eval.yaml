@@ -1,0 +1,22 @@
+name: loadmode-smoke
+
+# PLAN §Phase 6 smoke fixture: exercises the `aperture eval
+# loadmode` env-var contract end-to-end. The agent_check script is
+# a trivial shell script that verifies every §7.1.1 variable is
+# populated and exits 0. Both Plan_A and Plan_B pass, so the §7.5.1
+# delta classification lands in NO_CHANGE_PASS.
+task: |
+  Update the Greet function in cmd/sample/main.go.
+
+budget: 200000
+model: claude-sonnet-4-6
+
+repo_fingerprint: sha256:dfab1eaf6806c49b3951084490e82d54fea9f57d75301b8992595bab7a274ad2
+
+expected:
+  selections:
+    - path: cmd/sample/main.go
+
+agent_check:
+  command: scripts/always-pass.sh
+  timeout: 30s

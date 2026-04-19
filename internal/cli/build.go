@@ -132,7 +132,9 @@ func BuildManifest(in buildInputs) (*manifest.Manifest, error) {
 	// §7.6.5 underflow check. Must fire before the selector runs.
 	underflow := selection.Underflow(candidates, effective)
 
-	selResult := selection.Select(candidates, effective)
+	selResult := selection.SelectWithOptions(candidates, effective, selection.Options{
+		SuppressDemotion: in.SuppressDemotion,
+	})
 
 	selections, reachable := translateAssignments(selResult.Assignments, scoresByPath, in)
 

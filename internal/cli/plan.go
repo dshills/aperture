@@ -169,6 +169,13 @@ type buildInputs struct {
 	// is restricted to in-scope files, and s_import pass-2 only
 	// considers in-scope target packages. Zero value means no scope.
 	Scope repo.Scope
+	// SuppressDemotion forces the selector into v1.1 §7.5.1
+	// "Plan_B" mode: every full-eligible candidate lands at
+	// LoadModeFull regardless of budget. Budget overflow is
+	// tolerated and recorded on the resulting manifest via
+	// selection.Result.BudgetOverflow for `aperture eval loadmode`.
+	// MUST NOT be set by production code paths (forbidigo-gated).
+	SuppressDemotion bool //nolint:forbidigo // eval-only, gate enforced by .golangci.yml
 }
 
 // userOnly returns the config's user-added exclude patterns — i.e. cfg.Exclude

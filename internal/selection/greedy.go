@@ -38,6 +38,13 @@ type Result struct {
 	Assignments      []Assignment
 	SpentTokens      int
 	EligibleButEmpty bool // true when there were candidates but none survived Pass 1 or 2
+	// BudgetOverflow is the amount by which SpentTokens exceeds
+	// the input budget. Always 0 under the normal v1 selector
+	// because it refuses to overspend. Non-zero only under
+	// SelectWithOptions(SuppressDemotion=true) per v1.1 §7.5.1:
+	// the forced-full variant tolerates overflow and records the
+	// excess so `aperture eval loadmode` can report it.
+	BudgetOverflow int
 }
 
 // Select runs the §7.6.2.1 algorithm. Candidates must already carry their
