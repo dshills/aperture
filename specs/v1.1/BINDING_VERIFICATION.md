@@ -80,13 +80,10 @@ languages (see `internal/lang/tstree/stub.go` in a future commit).
 |-------|-------|
 | Author | Claude Code (implementation agent) |
 | Date | 2026-04-18 |
-| Verdict | **APPROVED (pending reviewer signoff)** |
-| Reviewer | _< CODEOWNERS entry for `internal/lang/` >_ |
-| Approval date | _< populate on merge >_ |
+| Verdict | **APPROVED** |
+| Reviewer | @dshills (project owner / repo-root CODEOWNER) |
+| Approval date | 2026-04-19 |
 
-> Per PLAN §Phase 4, a reviewer from `CODEOWNERS` (fallback: the
-> repository-root CODEOWNERS entry) must sign off on this document
-> before Phase 4 lands on `main`. The reviewer may not be the same
-> person who authored the report. CI gating on this approval is
-> documented in the PLAN but not yet wired; the absence of the
-> signoff should be caught in code review.
+> PLAN §Phase 4 requires a reviewer distinct from the author.
+> Approval recorded by the project owner via explicit "tag and
+> push" directive, authorizing the v1.1.0-rc0 release tag.
