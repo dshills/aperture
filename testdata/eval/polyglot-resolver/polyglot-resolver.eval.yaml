@@ -1,0 +1,26 @@
+name: polyglot-resolver
+
+# §3.3 / PLAN §Phase 4 — a polyglot repo with Go HTTP middleware AND
+# a TypeScript GraphQL resolver. Under v1.0 the Go planner would
+# pick up internal/http/middleware.go because it has a relevant
+# exported symbol. Under v1.1 tier-2, resolver.ts is tree-sitter-
+# parsed and its Resolver / resolveRateLimit / applyRateLimitHeader
+# symbols match the task anchors too. The expected top-ranked
+# selection is the TS file.
+#
+# The fixture also exercises the JS/TS test-linking rule: a sibling
+# resolver.test.ts exists and v1.1's LinkTests threads the links so
+# the `missing_tests` gap does NOT fire on resolver.ts.
+
+task: |
+  Add a rate-limit header to resolver.ts. Update Resolver.resolveRateLimit
+  and applyRateLimitHeader. The RateLimitResolver class emits RATE_LIMIT_HEADER.
+
+budget: 200000
+model: claude-sonnet-4-6
+
+repo_fingerprint: sha256:ad1d788c10825363612f58a5719f5d9a11f78b456abad1dfccb76ffcaf690d57
+
+expected:
+  selections:
+    - path: src/graphql/resolver.ts

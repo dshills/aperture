@@ -28,6 +28,15 @@ type BuildOptions struct {
 	// each Go file. Hits skip the AST parse and reuse the prior result;
 	// misses parse normally and write back to the cache.
 	Cache *cache.Cache
+
+	// TypeScriptEnabled / JavaScriptEnabled / PythonEnabled mirror the
+	// v1.1 §9 `languages.<name>.enabled` config flags. When false, the
+	// language's files skip tier-2 analysis and fall back to tier-3
+	// lexical (filename / doc tokens only). Default (zero-value) is
+	// false — callers MUST explicitly opt in per their resolved config.
+	TypeScriptEnabled bool
+	JavaScriptEnabled bool
+	PythonEnabled     bool
 }
 
 // Result is the full Phase-2 output: the assembled index and the walker's
@@ -117,6 +126,25 @@ func Build(opts BuildOptions) (Result, error) {
 		idx.Files[i].Symbols = r.Symbols
 		idx.Files[i].SideEffects = r.SideEffects
 		idx.Files[i].ParseError = r.ParseError
+	}
+
+	// v1.1 tier-2: analyze TS/JS/Python files via tree-sitter. Runs
+	// in parallel with the Go-analyze results already merged into
+	// idx.Files. §7.3.4 keys the cache the same way as Go, with a
+	// Language discriminator on the entry.
+	tier2Stats := runTier2Analysis(opts, idx, fileByPath)
+	stats.Hits += tier2Stats.Hits
+	stats.Misses += tier2Stats.Misses
+	stats.Writes += tier2Stats.Writes
+
+	// v1.1 §5.4: stamp every FileEntry with its LanguageTier.
+	for i := range idx.Files {
+		idx.Files[i].LanguageTier = string(index.ResolveTierForLanguage(
+			idx.Files[i].Language,
+			opts.TypeScriptEnabled,
+			opts.JavaScriptEnabled,
+			opts.PythonEnabled,
+		))
 	}
 
 	index.BuildPackages(idx)

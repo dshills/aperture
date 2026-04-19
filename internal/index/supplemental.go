@@ -75,6 +75,12 @@ var supplementalRules = []supplementalRule{
 	{SupTestConfig, "pytest.ini"},
 	{SupTestConfig, "tox.ini"},
 	{SupTestConfig, "go.test.yaml"},
+	// v1.1 §7.3.3: pytest conftest.py files are supplemental test
+	// infrastructure, always reachable in their package subtree.
+	// Matched anywhere (recursive) — each conftest.py applies to
+	// its own directory tree.
+	{SupTestConfig, "conftest.py"},
+	{SupTestConfig, "**/conftest.py"},
 
 	{SupBuildFiles, "Makefile"},
 	{SupBuildFiles, "makefile"},

@@ -1,0 +1,73 @@
+# goreleaser config for Aperture v1.1+
+# Runs on tag pushes via .github/workflows/release.yml. CGo is
+# required because tier-2 analysis links the tree-sitter C runtime
+# through github.com/smacker/go-tree-sitter (PLAN §Phase 4).
+#
+# Supported targets (PLAN §Phase 4):
+#   linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64
+#
+# Cross-compiles use zig as a cgo toolchain so x86_64 runners can
+# produce arm64 and Windows binaries without a native builder.
+version: 2
+
+project_name: aperture
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: aperture
+    main: ./cmd/aperture
+    binary: aperture
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      # Windows/arm64 is not in PLAN §Phase 4's supported matrix.
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X github.com/dshills/aperture/internal/version.Version={{ .Version }}
+      - -X github.com/dshills/aperture/internal/version.Commit={{ .FullCommit }}
+      - -X github.com/dshills/aperture/internal/version.BuildDate={{ .Date }}
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot"
+
+changelog:
+  sort: asc
+  use: git
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore\\(ci\\):"
+
+# CGo cross-compiles: use zig via `zig-cc`. Set up in the GHA
+# workflow (release.yml) by installing zig before invoking goreleaser.
+# The build matrix is enforced there rather than in this file so a
+# local `goreleaser release --snapshot` on a native Darwin host
+# produces darwin artifacts only, which is the common dev workflow.

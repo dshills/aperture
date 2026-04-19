@@ -45,6 +45,15 @@ type Entry struct {
 	Symbols     []index.Symbol `json:"symbols,omitempty"`
 	SideEffects []string       `json:"side_effects,omitempty"`
 	ParseError  bool           `json:"parse_error,omitempty"`
+	// Language is the v1.1 §7.3.4 discriminator. Stored as the walker
+	// language string ("go", "typescript", "javascript", "python").
+	// Cache entries written by v1.0 lack this field; v1.1 readers
+	// treat a missing value as "go" (the only tier analyzed by v1.0).
+	// A cache entry whose Language does not match the requesting
+	// analyzer's expected language is treated as a miss — the
+	// discriminator prevents a future path-collision bug from letting
+	// an analyzer misread a foreign-language entry.
+	Language string `json:"language,omitempty"`
 }
 
 // Key derives the per-file cache-key hash:

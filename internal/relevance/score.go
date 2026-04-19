@@ -347,7 +347,10 @@ func sFilename(f index.FileEntry, ctx *scoringContext) float64 {
 // symbol. Anchors are already ≥3 chars by construction in §7.3.2, so no
 // additional length guard is needed.
 func sSymbol(f index.FileEntry, ctx *scoringContext) float64 {
-	if f.Language != "go" || len(f.Symbols) == 0 || len(ctx.anchors) == 0 {
+	// v1.1 §5.4: both tier-1 (Go) and tier-2 (TS/JS/Python) files
+	// contribute to s_symbol. Tier-3 fallback files have no Symbols
+	// populated so the len-check naturally excludes them.
+	if len(f.Symbols) == 0 || len(ctx.anchors) == 0 {
 		return 0.0
 	}
 	var blob strings.Builder
@@ -531,7 +534,12 @@ func sConfig(f index.FileEntry, t task.Task, ctx *scoringContext) float64 {
 //	0.4 if any package within 2 hops has pass1 ≥ 0.60
 //	0.0 otherwise
 func sImport(f *index.FileEntry, importCache map[string]string, pkgScores map[string]float64, pkgImports map[string][]string) float64 {
-	if f == nil || f.Language != "go" || len(f.Imports) == 0 {
+	// v1.1 §5.4: both tier-1 (Go) and tier-2 (TS/JS/Python) files
+	// contribute to s_import. Tier-2 import specifiers are stored as
+	// the raw string ("./util", "node:fs", "os.path") and matched
+	// against repo-local package directories by the same
+	// resolveImportDir suffix rule that Go uses.
+	if f == nil || len(f.Imports) == 0 {
 		return 0.0
 	}
 	var best float64

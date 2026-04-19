@@ -147,3 +147,31 @@ bench-prepare:
 
 bench-clean:
 	rm -rf testdata/bench/small testdata/bench/medium
+
+# -----------------------------------------------------------------------
+# v1.1 eval harness shortcuts. `make eval` runs the committed
+# selection-quality regression gate; `make eval-baseline` is the
+# reviewer-only helper for regenerating baseline.json after a
+# deliberate scoring change (PLAN §Phase 1 / §Phase 2).
+.PHONY: eval eval-baseline
+eval: build
+	./bin/$(BINARY_NAME) eval run --fixtures testdata/eval
+
+eval-baseline: build
+	./bin/$(BINARY_NAME) eval baseline --fixtures testdata/eval --force
+
+# v1.1 tier-2 grammar license check per PLAN §Phase 4. Asserts that
+# the upstream tree-sitter modules ship LICENSE files (they do —
+# smacker/go-tree-sitter vendors LICENSE into every language subdir).
+# The check here runs against the Go module cache rather than a
+# vendored tree; CI invokes this as a required step.
+.PHONY: check-grammar-licenses
+check-grammar-licenses:
+	@set -e; \
+	MOD=$$(go env GOMODCACHE)/github.com/smacker/go-tree-sitter@$$(go list -m -f '{{.Version}}' github.com/smacker/go-tree-sitter); \
+	for lang in typescript/typescript typescript/tsx javascript python; do \
+		if [ ! -s "$$MOD/LICENSE" ] && [ ! -s "$$MOD/$$lang/LICENSE" ]; then \
+			echo "missing LICENSE for $$lang under $$MOD"; exit 1; \
+		fi; \
+	done
+	@echo "grammar license check: OK"

@@ -57,6 +57,11 @@ type FileEntry struct {
 	// emitted with `outside_scope_supplemental` rationale.
 	// Always false when no scope is active.
 	OutOfScope bool
+	// LanguageTier is the v1.1 §5.4 tier-* descriptive name for this
+	// file's language. Populated by the pipeline at index-assembly
+	// time. Cache entries written by v1.0 lack this field and read
+	// back as tier1_deep for Go files / tier3_lexical otherwise.
+	LanguageTier string
 }
 
 // SymbolKind enumerates the exported-symbol classes v1 extracts.
@@ -71,11 +76,15 @@ const (
 	SymbolVar       SymbolKind = "var"
 )
 
-// Symbol is one exported declaration from a Go file.
+// Symbol is one declaration from a source file. For Go (tier-1) only
+// exported symbols are emitted (Exported is always true). For tier-2
+// languages per §7.3.2, BOTH exported and non-exported module-level
+// declarations are emitted; Exported distinguishes them.
 type Symbol struct {
 	Name     string
 	Kind     SymbolKind
 	Receiver string // only set when Kind == SymbolMethod
+	Exported bool
 }
 
 // Package groups the files that share an import path. Files within a
@@ -99,7 +108,7 @@ func FromWalk(w repo.WalkResult) *Index {
 			MTime:     f.MTime,
 			Extension: f.Extension,
 			Language:  f.Language,
-			IsTest:    f.Extension == ".go" && hasSuffix(f.Path, "_test.go"),
+			IsTest:    isTestFile(f.Path, f.Extension),
 		})
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
@@ -136,8 +145,4 @@ func (idx *Index) File(path string) *FileEntry {
 		}
 	}
 	return nil
-}
-
-func hasSuffix(s, suf string) bool {
-	return len(s) >= len(suf) && s[len(s)-len(suf):] == suf
 }

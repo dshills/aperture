@@ -105,10 +105,13 @@ func preparePlan(repoFlag string, taskArgs []string, inlineText, configFlag stri
 	}
 
 	res, err := pipeline.Build(pipeline.BuildOptions{
-		Root:            repoRoot,
-		DefaultExcludes: config.DefaultExclusions(),
-		UserExcludes:    userOnly(cfg),
-		Cache:           astCache,
+		Root:              repoRoot,
+		DefaultExcludes:   config.DefaultExclusions(),
+		UserExcludes:      userOnly(cfg),
+		Cache:             astCache,
+		TypeScriptEnabled: cfg.Languages.TypeScript.Enabled,
+		JavaScriptEnabled: cfg.Languages.JavaScript.Enabled,
+		PythonEnabled:     cfg.Languages.Python.Enabled,
 	})
 	if err != nil {
 		return commonInputs{}, exitErr(exitCodeInternal, fmt.Errorf("index build: %w", err))

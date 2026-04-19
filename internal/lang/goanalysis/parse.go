@@ -183,7 +183,7 @@ func symbolsFromGenDecl(d *ast.GenDecl) []index.Symbol {
 			if _, ok := ts.Type.(*ast.InterfaceType); ok {
 				kind = index.SymbolInterface
 			}
-			out = append(out, index.Symbol{Name: ts.Name.Name, Kind: kind})
+			out = append(out, index.Symbol{Name: ts.Name.Name, Kind: kind, Exported: true})
 		}
 	case token.CONST, token.VAR:
 		kind := index.SymbolConst
@@ -199,7 +199,7 @@ func symbolsFromGenDecl(d *ast.GenDecl) []index.Symbol {
 				if n == nil || !n.IsExported() {
 					continue
 				}
-				out = append(out, index.Symbol{Name: n.Name, Kind: kind})
+				out = append(out, index.Symbol{Name: n.Name, Kind: kind, Exported: true})
 			}
 		}
 	}
@@ -211,10 +211,10 @@ func symbolFromFuncDecl(d *ast.FuncDecl) (index.Symbol, bool) {
 		return index.Symbol{}, false
 	}
 	if d.Recv == nil || len(d.Recv.List) == 0 {
-		return index.Symbol{Name: d.Name.Name, Kind: index.SymbolFunc}, true
+		return index.Symbol{Name: d.Name.Name, Kind: index.SymbolFunc, Exported: true}, true
 	}
 	recv := receiverTypeName(d.Recv.List[0].Type)
-	return index.Symbol{Name: d.Name.Name, Kind: index.SymbolMethod, Receiver: recv}, true
+	return index.Symbol{Name: d.Name.Name, Kind: index.SymbolMethod, Receiver: recv, Exported: true}, true
 }
 
 // receiverTypeName recovers the receiver type's identifier (stripping `*`

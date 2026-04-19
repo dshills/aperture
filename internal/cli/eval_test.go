@@ -1,3 +1,12 @@
+//go:build !notier2
+
+// The committed eval fixtures include `polyglot-resolver` whose
+// expected F1 assumes tier-2 is enabled. Under `-tags notier2` the
+// tier-2 analyzer is stubbed and that fixture regresses; guard the
+// CLI integration tests accordingly. Unit-level eval tests (scoring
+// math, baseline I/O, determinism) are in internal/eval and are
+// language-agnostic.
+
 package cli
 
 import (

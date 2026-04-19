@@ -135,8 +135,11 @@ func Default() Config {
 		Exclude:         DefaultExclusions(),
 		DisableDefaults: false,
 		Languages: Languages{
-			Go:       LanguageEntry{Enabled: true},
-			Markdown: LanguageEntry{Enabled: true},
+			Go:         LanguageEntry{Enabled: true},
+			Markdown:   LanguageEntry{Enabled: true},
+			TypeScript: LanguageEntry{Enabled: true},
+			JavaScript: LanguageEntry{Enabled: true},
+			Python:     LanguageEntry{Enabled: true},
 		},
 		Thresholds: DefaultThresholds(),
 		Output: Output{

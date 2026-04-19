@@ -344,6 +344,14 @@
         "wall_clock_started_at": {
           "type": "string",
           "format": "date-time"
+        },
+        "language_tiers": {
+          "description": "v1.1 §10.1: map from language hint (go, typescript, javascript, python, ...) to the §5.4 descriptive tier (tier1_deep, tier2_structural, tier3_lexical). Omitted on v1.0 manifests.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "enum": ["tier1_deep", "tier2_structural", "tier3_lexical"]
+          }
         }
       }
     }

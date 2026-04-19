@@ -539,6 +539,7 @@ func assembleManifest(
 			Host:                    host,
 			PID:                     os.Getpid(),
 			WallClockStartedAt:      now,
+			LanguageTiers:           languageTiersFromIndex(in),
 		},
 	}
 	// v1.1 §7.4.4: emit the scope projection here (not after) so every
@@ -548,6 +549,28 @@ func assembleManifest(
 		m.Scope = &manifest.Scope{Path: in.Scope.Path}
 	}
 	return m
+}
+
+// languageTiersFromIndex builds the §10.1 language_tiers map by
+// reducing FileEntry.LanguageTier values to a language → tier
+// summary. The result is a stable, sorted-key map (encoding/json
+// sorts map keys lexicographically on emit, so deterministic input
+// is all we need). Empty when the index has no files.
+func languageTiersFromIndex(in buildInputs) map[string]string {
+	if in.Index == nil || len(in.Index.Files) == 0 {
+		return nil
+	}
+	out := make(map[string]string)
+	for _, f := range in.Index.Files {
+		if f.Language == "" || f.LanguageTier == "" {
+			continue
+		}
+		out[f.Language] = f.LanguageTier
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func resolvedModel(in buildInputs) string {

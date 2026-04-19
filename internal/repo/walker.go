@@ -282,7 +282,7 @@ func languageForExt(ext, base string) string {
 		return "sql"
 	case ".ts", ".tsx":
 		return "typescript"
-	case ".js", ".jsx":
+	case ".js", ".jsx", ".mjs", ".cjs":
 		return "javascript"
 	case ".py":
 		return "python"

@@ -49,8 +49,11 @@ type Reserve struct {
 }
 
 type Languages struct {
-	Go       LanguageEntry `yaml:"go" json:"go"`
-	Markdown LanguageEntry `yaml:"markdown" json:"markdown"`
+	Go         LanguageEntry `yaml:"go" json:"go"`
+	Markdown   LanguageEntry `yaml:"markdown" json:"markdown"`
+	TypeScript LanguageEntry `yaml:"typescript" json:"typescript"`
+	JavaScript LanguageEntry `yaml:"javascript" json:"javascript"`
+	Python     LanguageEntry `yaml:"python" json:"python"`
 }
 
 type LanguageEntry struct {

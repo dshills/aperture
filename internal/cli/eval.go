@@ -353,9 +353,12 @@ func runOneFixture(fx eval.Fixture) eval.FixtureResult {
 	// fixture tree and break the fixture fingerprint. Fixture runs are
 	// deterministic one-shots — the cache miss cost is acceptable.
 	pipeRes, err := pipeline.Build(pipeline.BuildOptions{
-		Root:            repoDir,
-		DefaultExcludes: config.DefaultExclusions(),
-		UserExcludes:    userOnly(cfg),
+		Root:              repoDir,
+		DefaultExcludes:   config.DefaultExclusions(),
+		UserExcludes:      userOnly(cfg),
+		TypeScriptEnabled: cfg.Languages.TypeScript.Enabled,
+		JavaScriptEnabled: cfg.Languages.JavaScript.Enabled,
+		PythonEnabled:     cfg.Languages.Python.Enabled,
 	})
 	if err != nil {
 		res.Error = fmt.Sprintf("pipeline: %s", err.Error())

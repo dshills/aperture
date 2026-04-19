@@ -187,4 +187,9 @@ type GenerationMetadata struct {
 	Host                    string `json:"host"`
 	PID                     int    `json:"pid"`
 	WallClockStartedAt      string `json:"wall_clock_started_at"`
+	// LanguageTiers maps each language hint observed in the repo
+	// (e.g. "go", "typescript", "python") to its v1.1 §5.4 tier —
+	// "tier1_deep", "tier2_structural", or "tier3_lexical". Absent
+	// entries in v1.0 manifests; present in v1.1 with sorted keys.
+	LanguageTiers map[string]string `json:"language_tiers,omitempty"`
 }
