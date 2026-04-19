@@ -1,4 +1,4 @@
-.PHONY: help build install test lint fmt bench bench-prepare bench-clean
+.PHONY: help build install test lint fmt bench bench-prepare bench-clean smoke
 
 # Pin the recipe shell to /bin/sh so the install target's case /
 # parameter-expansion syntax doesn't have to survive cmd.exe. Windows
@@ -147,6 +147,13 @@ bench-prepare:
 
 bench-clean:
 	rm -rf testdata/bench/small testdata/bench/medium
+
+# Opt-in real-agent smoke test. Drives `aperture run claude` against a
+# copy of testdata/fixtures/small_go using the real claude CLI on PATH.
+# Hits the network and consumes tokens — not part of `make test`. The
+# test itself auto-skips when claude is not on PATH.
+smoke:
+	go test -tags smoke -run TestSmoke_RealClaudeAdapter -v ./internal/cli
 
 # -----------------------------------------------------------------------
 # v1.1 eval harness shortcuts. `make eval` runs the committed
