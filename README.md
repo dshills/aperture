@@ -722,6 +722,16 @@ See [`CHANGELOG.md`](CHANGELOG.md) for the full list and
 [`specs/v1.1/SPEC.md`](specs/v1.1/SPEC.md) for the normative
 delta contract.
 
+## Harness integrations
+
+Aperture is harness-neutral — anything that can shell out to the CLI
+can use it. `examples/claude-code-skill/` ships one concrete
+integration: a Claude Code skill that teaches Claude when and how to
+invoke `aperture` before starting a coding task. See
+[`examples/claude-code-skill/README.md`](examples/claude-code-skill/README.md).
+
+---
+
 ## Project status
 
 v1.1 feature-complete. All seven v1.1 implementation phases
