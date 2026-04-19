@@ -730,6 +730,40 @@ integration: a Claude Code skill that teaches Claude when and how to
 invoke `aperture` before starting a coding task. See
 [`examples/claude-code-skill/README.md`](examples/claude-code-skill/README.md).
 
+### Using aperture from `CLAUDE.md` / `AGENTS.md`
+
+If your project uses a `CLAUDE.md` or `AGENTS.md` to brief coding
+agents, add the block below to tell the agent to gate itself through
+aperture before touching code. The language is harness-neutral — it
+works with Claude Code, Codex, or anything else that reads these
+files. Replace `<agent>` with the name of the adapter declared in
+your `.aperture.yaml` (typically `claude` or `codex`).
+
+~~~markdown
+## Pre-coding: run aperture
+
+Before starting any non-trivial code change in this repo, run aperture
+to plan context and check feasibility:
+
+    aperture plan TASK.md --format markdown
+
+If a `TASK.md` doesn't exist, pass the task inline:
+
+    aperture plan -p "<one-line task description>" --format markdown
+
+Interpret the output:
+- `feasibility.score < 0.70` or any `severity: blocking` gap → stop and
+  fix the task description or repo state. Do not lower the threshold to
+  get past the gate.
+- `load_mode: full` selections are the files to read first.
+- `reachable` files are discoverable follow-ups, not pre-loaded context.
+
+For an integrated run that plans, persists the manifest, and invokes
+the agent in one step:
+
+    aperture run <agent> TASK.md --fail-on-gaps --min-feasibility 0.70
+~~~
+
 ---
 
 ## Project status
