@@ -35,11 +35,11 @@ jobs:
         run: go vet ./...
       - name: install golangci-lint
         # The repo's .golangci.yml uses the v2 config schema
-        # (`version: "2"`), so the tool must be v2.x. v1.x
-        # rejects the config with "invalid elements". Pinned to
-        # v2.1.6 so a lint-rule upgrade lands as an explicit
-        # bump in this file rather than a surprise CI break.
-        uses: golangci/golangci-lint-action@v6
+        # (`version: "2"`), so the tool must be v2.x. The action
+        # must also be v7+ — v6 has an explicit "v2 is not
+        # supported" guard. Both get pinned together so surprise
+        # breakage surfaces as an intentional bump here.
+        uses: golangci/golangci-lint-action@v7
         with:
           version: v2.1.6
       - name: go test
