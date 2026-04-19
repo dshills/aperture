@@ -685,22 +685,59 @@ Violations are caught by `depguard` in CI.
 
 ---
 
+## What's new in v1.1
+
+v1.1 is a strictly-additive release that closes the credibility
+gaps called out by the post-v1.0 external review. The v1.0
+contract — manifest shape, exit codes, determinism, CLI flags —
+is preserved unchanged.
+
+- **`aperture eval`** — score plans against committed
+  ground-truth fixtures, compare against a ripgrep baseline,
+  and gate CI on regression.
+  See [`docs/eval.md`](docs/eval.md).
+- **`aperture eval loadmode`** — empirical calibration of the
+  `behavioral_summary` vs `full` demotion rule, with a
+  §7.5.2 threshold advisor.
+  See [`docs/loadmode.md`](docs/loadmode.md).
+- **Mention dampener** — `s_mention` is clamped when no
+  other signal agrees, defusing gameable-mention false
+  positives. `selection_logic_version` bumped to `sel-v2`.
+- **`--scope <path>`** — project a plan onto a monorepo
+  subtree. Fingerprint still covers the full tree;
+  supplementals stay admissible across the scope boundary.
+  See [`docs/scope.md`](docs/scope.md).
+- **Tier-2 languages** — TypeScript, JavaScript, and Python
+  get module-level symbol/import extraction via tree-sitter.
+  See [`docs/tier2.md`](docs/tier2.md).
+- **`aperture diff`** — section-by-section comparison of two
+  manifests. Read-only — never touches the planner or
+  repository. See [`docs/diff.md`](docs/diff.md).
+- **`-tags notier2`** — pure-Go fallback build that skips
+  tier-2 analysis, for `CGO_ENABLED=0` environments.
+- **Prebuilt binaries** for linux/{amd64,arm64},
+  darwin/{amd64,arm64}, and windows/amd64 via goreleaser.
+
+See [`CHANGELOG.md`](CHANGELOG.md) for the full list and
+[`specs/v1.1/SPEC.md`](specs/v1.1/SPEC.md) for the normative
+delta contract.
+
 ## Project status
 
-v1 feature-complete. All six implementation phases ship with passing
-unit + integration + property + fuzz + golden + determinism tests
-under `make test` and `golangci-lint run ./...`. See
-`specs/initial/SPEC.md` for the normative contract and
-`specs/initial/PLAN.md` for the phased implementation history.
+v1.1 feature-complete. All seven v1.1 implementation phases
+ship with passing unit + integration + property + fuzz + golden
++ determinism tests under `make test` and `golangci-lint run
+./...`. v1's SPEC lives at `specs/initial/SPEC.md`; v1.1's
+additive contract at `specs/v1.1/SPEC.md`.
 
-Deferred post-v1 work:
+Deferred post-v1.1 work:
 
 - `aperture inspect` subcommand for interactive manifest diffing.
 - Formal trust-gate (explicit approval flow + persisted trusted-
   agents file) for `.aperture.yaml`-declared custom adapter commands.
 - Secret-pattern redaction of manifest contents.
-- TypeScript / Python AST support.
-- Symbol-level (rather than file-level) budgeting.
+- Per-symbol (rather than file-level) budgeting.
+- Side-effect tagging for tier-2 languages.
 - Optional LLM summarization (opt-in, clearly flagged, pinned model).
 
 ---

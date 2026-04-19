@@ -1,0 +1,24 @@
+name: large-budget-pressure
+
+# §12.1 large-repo budget-pressure case. Four packages each
+# export Processor / NewProcessor / Process / Close. The task
+# mentions Processor everywhere so every file is a viable
+# candidate; the tight budget forces the selector to demote some
+# of them to summaries. Expected: at least one of the four
+# packages' file is selected. The precise ranking depends on the
+# §7.6.2 greedy selector's efficiency ordering; any of the four
+# is acceptable as the regression anchor.
+
+task: |
+  Audit Processor.Process across internal/alpha, internal/beta,
+  internal/gamma, and internal/delta. NewProcessor and Close
+  also need review.
+
+budget: 25000
+model: claude-sonnet-4-6
+
+repo_fingerprint: sha256:0c164bd23e1894c44501e57203b30408589b935022f69adf28e6809c23ff1c7f
+
+expected:
+  selections:
+    - path: internal/alpha/alpha.go

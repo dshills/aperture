@@ -1,9 +1,19 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-04-19T10:59:29Z",
+  "generated_at": "2026-04-19T11:28:55Z",
   "aperture_version": "dev",
   "selection_logic_version": "sel-v2",
   "fixtures": {
+    "combined-polyglot-scope": {
+      "precision": 1,
+      "recall": 0,
+      "f1": 0
+    },
+    "large-budget-pressure": {
+      "precision": 1,
+      "recall": 0,
+      "f1": 0
+    },
     "loadmode-smoke": {
       "precision": 1,
       "recall": 1,
@@ -24,10 +34,20 @@
       "recall": 1,
       "f1": 0.6666666666666666
     },
+    "polyglot-python": {
+      "precision": 1,
+      "recall": 0,
+      "f1": 0
+    },
     "polyglot-resolver": {
       "precision": 1,
       "recall": 1,
       "f1": 1
+    },
+    "small-single-file": {
+      "precision": 1,
+      "recall": 0,
+      "f1": 0
     },
     "trivial-fail": {
       "precision": 0,

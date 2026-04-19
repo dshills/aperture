@@ -1,0 +1,20 @@
+name: polyglot-python
+
+# §12.1 / PLAN §Phase 7 — polyglot Go+Python fixture. Under v1.0
+# the Go Orchestrator would win on s_symbol alone; under v1.1
+# tier-2 the Python BatchRunner class, run_batch method, and
+# process_records function are all module-level symbols and the
+# Python file scores higher.
+
+task: |
+  Update scripts/runner.py. The BatchRunner class needs
+  run_batch and process_records to accept a new shard parameter.
+
+budget: 200000
+model: claude-sonnet-4-6
+
+repo_fingerprint: sha256:a19a366dbb0dc3954cf0d344f6302d116896b0183c2d4e80478157722a1934f3
+
+expected:
+  selections:
+    - path: scripts/runner.py

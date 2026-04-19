@@ -1,0 +1,26 @@
+name: combined-polyglot-scope
+
+# PLAN §Phase 7 combined polyglot+scope+dampener fixture. The
+# billing service mixes Go (charge.go), TypeScript (refund.ts),
+# and Python (refund.py). The task mentions RefundCharge and
+# refundCharge / refund_charge across languages so every file
+# in services/billing/ is a viable candidate — a scope-restricted
+# plan (not exercised here; the scope-vs-no-scope behavior is
+# covered by internal/cli/scope_test.go) would confine itself to
+# that subtree. Fixture F1 against expected.selections anchors
+# the full-repo baseline.
+
+task: |
+  Refund flow rewrite. RefundCharge.Apply in charge.go needs to
+  call refundCharge from refund.ts and reconcile with
+  refund_charge in refund.py. RefundContext and RefundReport
+  already carry the new fields.
+
+budget: 200000
+model: claude-sonnet-4-6
+
+repo_fingerprint: sha256:89cd6516b797af27e6296c65ecc5532f6625213191cd99f51b2098e3c12be10c
+
+expected:
+  selections:
+    - path: services/billing/internal/charge.go

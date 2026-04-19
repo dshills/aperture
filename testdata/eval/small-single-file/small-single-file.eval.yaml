@@ -1,0 +1,19 @@
+name: small-single-file
+
+# §12.1 small-repo single-file task category. The repo contains
+# one Go source file plus go.mod; the task points at Config and
+# LoadConfig. Every scoring factor converges on config.go.
+
+task: |
+  Update the Config struct and LoadConfig so the MaxRPS knob
+  defaults to 250 instead of 100. ValidateConfig should accept
+  the new ceiling.
+
+budget: 200000
+model: claude-sonnet-4-6
+
+repo_fingerprint: sha256:2799af5d064072c03d55b60455019e1c5a996f3669d3fa879fd0c93aac80bf6f
+
+expected:
+  selections:
+    - path: config.go

@@ -1,0 +1,110 @@
+name: ci
+
+# Core gate on every push to main and every PR. The v1.1 §12
+# acceptance criteria flow through this workflow:
+#
+#   - build + vet + lint + unit tests + race (default-tags build)
+#   - notier2 build (CGO_ENABLED=0 escape hatch)
+#   - aperture eval run (selection-quality regression gate)
+#   - aperture eval ripgrep (1.2× F1 bar, informational this pass)
+#   - check-grammar-licenses
+#
+# The release workflow (.github/workflows/release.yml) is
+# responsible for binary artifacts on tag pushes; CI is the
+# source-tree gate.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  tests-default:
+    name: build + test (tier-2 enabled)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: true
+      - name: go build
+        run: go build ./...
+      - name: go vet
+        run: go vet ./...
+      - name: install golangci-lint
+        # Pin both the action major version and the tool minor
+        # version so lint upgrades land via intentional bumps
+        # rather than a surprise CI failure on a rule change.
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.60
+      - name: go test
+        run: go test ./...
+      - name: go test -race (eval + cli + pipeline + selection)
+        run: go test -race ./internal/eval ./internal/cli ./internal/pipeline ./internal/selection
+
+  tests-notier2:
+    name: build + test (CGO_ENABLED=0, -tags notier2)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: true
+      - name: go build -tags notier2
+        env:
+          CGO_ENABLED: "0"
+        run: go build -tags notier2 ./...
+      - name: go test -tags notier2
+        env:
+          CGO_ENABLED: "0"
+        run: go test -tags notier2 ./...
+
+  grammar-licenses:
+    name: check-grammar-licenses
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: true
+      - name: make check-grammar-licenses
+        run: make check-grammar-licenses
+
+  eval:
+    name: aperture eval run (regression gate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: true
+      - name: aperture eval run
+        # Exit 2 on regression, hard-fail, or orphaned baseline
+        # entry per §4.1 / §7.1.3. CI fails on any non-zero exit.
+        # `make eval` depends on `make build` so the binary path
+        # stays in sync with the Makefile's BINARY_NAME logic.
+        run: make eval
+
+  eval-ripgrep:
+    name: aperture eval ripgrep (1.2x F1 bar, informational)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: true
+      - name: aperture eval ripgrep
+        # ripgrep is preinstalled on ubuntu-latest runners.
+        # `make eval-ripgrep` wraps the command so the binary
+        # path stays in sync with the Makefile's BINARY_NAME
+        # logic. Informational only — gating on §12.2's 1.2×
+        # F1 bar is deferred until the §7.5.0 viability
+        # threshold is retuned.
+        run: make eval-ripgrep

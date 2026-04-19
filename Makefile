@@ -153,12 +153,19 @@ bench-clean:
 # selection-quality regression gate; `make eval-baseline` is the
 # reviewer-only helper for regenerating baseline.json after a
 # deliberate scoring change (PLAN §Phase 1 / §Phase 2).
-.PHONY: eval eval-baseline
+.PHONY: eval eval-baseline eval-ripgrep
 eval: build
 	./bin/$(BINARY_NAME) eval run --fixtures testdata/eval
 
 eval-baseline: build
 	./bin/$(BINARY_NAME) eval baseline --fixtures testdata/eval --force
+
+# §12.2 ripgrep comparator — runs as an informational CI step
+# right now; gating on the 1.2× F1 bar is deferred until the
+# §7.5.0 viability threshold is retuned (a few small fixtures
+# score 0 on both sides).
+eval-ripgrep: build
+	./bin/$(BINARY_NAME) eval ripgrep --fixtures testdata/eval --top-n 20 --format markdown
 
 # v1.1 tier-2 grammar license check per PLAN §Phase 4. Asserts that
 # the upstream tree-sitter modules ship LICENSE files (they do —
@@ -175,3 +182,30 @@ check-grammar-licenses:
 		fi; \
 	done
 	@echo "grammar license check: OK"
+
+# -----------------------------------------------------------------------
+# v1.1 §12 release gate. Runs every blocking step in the order
+# PLAN §Phase 7 requires:
+#   1. build + vet
+#   2. test (unit + integration)
+#   3. lint
+#   4. race tests on the eval-critical packages
+#   5. check-grammar-licenses
+#   6. eval run (catches any F1 regression vs. committed baseline)
+#
+# Any failing step aborts with a non-zero exit. `clarion verify`
+# runs as an advisory final step (doesn't gate the release; per
+# PLAN §Phase 7 the normative contract is the 11 §12 acceptance
+# criteria, not the external pipeline gates).
+.PHONY: release
+release: build
+	@set -e; \
+	echo "==> go vet ./..."; go vet ./...; \
+	echo "==> go test ./..."; go test ./...; \
+	echo "==> golangci-lint run ./..."; golangci-lint run ./...; \
+	echo "==> go test -race (eval + cli + pipeline)"; \
+	go test -race ./internal/eval ./internal/cli ./internal/pipeline ./internal/selection; \
+	echo "==> make check-grammar-licenses"; $(MAKE) check-grammar-licenses; \
+	echo "==> aperture eval run (v1.1 regression gate)"; \
+	./bin/$(BINARY_NAME) eval run --fixtures testdata/eval; \
+	echo; echo "release gate: all checks passed"
