@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -28,7 +29,7 @@ func buildFixtureInputs(t *testing.T, rawTask string, model string, budget int) 
 	}
 	cfg := config.Default()
 	parsed := task.Parse(rawTask, task.ParseOptions{Source: "<inline>"})
-	res, err := pipeline.Build(pipeline.BuildOptions{
+	res, err := pipeline.Build(context.Background(), pipeline.BuildOptions{
 		Root:            fixture,
 		DefaultExcludes: config.DefaultExclusions(),
 	})

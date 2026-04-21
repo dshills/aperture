@@ -1,6 +1,7 @@
 package goanalysis
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"slices"
@@ -15,6 +16,7 @@ const sampleGo = `
 package sample
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -56,7 +58,7 @@ func TestAnalyze_ExtractsEveryExportedSymbolKind(t *testing.T) {
 	p := "sample.go"
 	writeTempFile(t, filepath.Join(root, p), sampleGo)
 
-	res, err := Analyze(AnalyzeOptions{Root: root, Paths: []string{p}})
+	res, err := Analyze(context.Background(), AnalyzeOptions{Root: root, Paths: []string{p}})
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}
@@ -108,11 +110,12 @@ func TestAnalyze_ParseErrorFallbackRecordsImports(t *testing.T) {
 	// Truncated function declaration — will NOT parse.
 	writeTempFile(t, filepath.Join(root, p), `package broken
 import (
+	"context"
 	"os"
 	"time"
 )
 func Broken( { `)
-	res, err := Analyze(AnalyzeOptions{Root: root, Paths: []string{p}})
+	res, err := Analyze(context.Background(), AnalyzeOptions{Root: root, Paths: []string{p}})
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}
@@ -137,7 +140,7 @@ func TestAnalyze_DeterministicOrdering(t *testing.T) {
 	// Call twice with shuffled input orders; outputs must still be sorted
 	// ascending by path.
 	for _, order := range [][]string{{"b.go", "a.go", "c.go"}, {"c.go", "b.go", "a.go"}} {
-		res, err := Analyze(AnalyzeOptions{Root: root, Paths: order})
+		res, err := Analyze(context.Background(), AnalyzeOptions{Root: root, Paths: order})
 		if err != nil {
 			t.Fatalf("Analyze: %v", err)
 		}

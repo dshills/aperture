@@ -33,7 +33,7 @@ type tier2Target struct {
 //
 // Returns the cache statistics so Build can merge them into the
 // overall CacheStats total.
-func runTier2Analysis(opts BuildOptions, idx *index.Index, fileByPath map[string]*index.FileEntry) CacheStats {
+func runTier2Analysis(ctx context.Context, opts BuildOptions, idx *index.Index, fileByPath map[string]*index.FileEntry) (CacheStats, error) {
 	// Partition target files by (language, lang-enum), skipping
 	// anything whose language is disabled in config.
 	targets := make([]tier2Target, 0)
@@ -61,7 +61,7 @@ func runTier2Analysis(opts BuildOptions, idx *index.Index, fileByPath map[string
 		targets = append(targets, tier2Target{Path: f.Path, Lang: lang})
 	}
 	if len(targets) == 0 {
-		return CacheStats{}
+		return CacheStats{}, nil
 	}
 	sort.Slice(targets, func(i, j int) bool { return targets[i].Path < targets[j].Path })
 
@@ -96,8 +96,13 @@ func runTier2Analysis(opts BuildOptions, idx *index.Index, fileByPath map[string
 		misses = targets
 	}
 
-	// Parse misses in a bounded worker pool.
-	fresh := parseTier2Misses(opts.Root, misses)
+	// Parse misses in a bounded worker pool. ctx cancellation
+	// propagates up as an error — callers MUST check, since a
+	// cancelled parse must not silently produce a partial index.
+	fresh, err := parseTier2Misses(ctx, opts.Root, misses)
+	if err != nil {
+		return stats, err
+	}
 
 	// Write misses back to cache concurrently (per-file independent
 	// fsync). Failures are slog.Warn'd but never abort the plan.
@@ -130,15 +135,21 @@ func runTier2Analysis(opts BuildOptions, idx *index.Index, fileByPath map[string
 		}
 		idx.Files[i].ParseError = r.ParseError || idx.Files[i].ParseError
 	}
-	return stats
+	return stats, nil
 }
 
 // parseTier2Misses invokes tstree.Parse on each miss in parallel
 // across a bounded worker pool. Returns the fresh results in
 // deterministic (path-sorted) order for downstream merging.
-func parseTier2Misses(root string, misses []tier2Target) []tstree.Result {
+//
+// Cancellation is surfaced as a distinct error, not as ParseError-
+// flagged results — conflating a system-level cancel with a parse
+// failure would silently yield an incomplete Index flagged as
+// "normally built." On cancel, workers drain without producing new
+// results and the function returns ctx.Err().
+func parseTier2Misses(ctx context.Context, root string, misses []tier2Target) ([]tstree.Result, error) {
 	if len(misses) == 0 {
-		return nil
+		return nil, nil
 	}
 	workers := runtime.NumCPU()
 	if workers < 1 {
@@ -167,13 +178,20 @@ func parseTier2Misses(root string, misses []tier2Target) []tstree.Result {
 		go func() {
 			defer wg.Done()
 			for j := range jobs {
+				if ctx.Err() != nil {
+					// Exit this worker on cancel rather than
+					// draining. Cancellation surfaces to the caller
+					// via ctx.Err() below; emitting a ParseError
+					// result here would pollute the index.
+					return
+				}
 				abs := filepath.Join(root, filepath.FromSlash(j.Path))
 				src, err := os.ReadFile(abs) //nolint:gosec // walker-verified path
 				if err != nil {
 					out <- tstree.Result{Path: j.Path, ParseError: true}
 					continue
 				}
-				r := tstree.Parse(context.Background(), j.Path, j.Lang, src)
+				r := tstree.Parse(ctx, j.Path, j.Lang, src)
 				out <- *r
 			}
 		}()
@@ -184,8 +202,11 @@ func parseTier2Misses(root string, misses []tier2Target) []tstree.Result {
 	for r := range out {
 		results = append(results, r)
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	sort.Slice(results, func(i, j int) bool { return results[i].Path < results[j].Path })
-	return results
+	return results, nil
 }
 
 // writeTier2Cache writes fresh tier-2 results to the cache in

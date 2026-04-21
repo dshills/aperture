@@ -127,7 +127,7 @@ func runOneLoadmodeFixture(ctx context.Context, fx eval.Fixture) (eval.LoadmodeF
 		cfg.Defaults.Model = fx.Model
 	}
 
-	pipeRes, err := pipeline.Build(pipeline.BuildOptions{
+	pipeRes, err := pipeline.Build(ctx, pipeline.BuildOptions{
 		Root:              repoDir,
 		DefaultExcludes:   config.DefaultExclusions(),
 		UserExcludes:      userOnly(cfg),

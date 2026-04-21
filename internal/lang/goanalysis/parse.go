@@ -2,6 +2,7 @@ package goanalysis
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -40,7 +41,12 @@ type AnalyzeOptions struct {
 // Analyze parses every listed Go file concurrently and returns a slice of
 // FileResult sorted ascending by path so downstream stages assemble the
 // Index deterministically regardless of goroutine scheduling.
-func Analyze(opts AnalyzeOptions) ([]FileResult, error) {
+//
+// ctx is checked at the top of each per-file worker loop so a cancel
+// short-circuits the remaining file set; a file that has already begun
+// parsing when ctx cancels will run to completion (go/parser is not
+// natively cancelable). Returns ctx.Err() if cancelled.
+func Analyze(ctx context.Context, opts AnalyzeOptions) ([]FileResult, error) {
 	if len(opts.Paths) == 0 {
 		return nil, nil
 	}
@@ -74,6 +80,16 @@ func Analyze(opts AnalyzeOptions) ([]FileResult, error) {
 		go func() {
 			defer wg.Done()
 			for rel := range jobs {
+				if err := ctx.Err(); err != nil {
+					// Record the cancel once and exit this worker
+					// rather than draining. The job channel was pre-
+					// filled and closed before workers started, so
+					// remaining jobs simply go un-serviced; other
+					// workers observe ctx.Err() on their own next
+					// iteration and likewise return.
+					once.Do(func() { firstErr = err })
+					return
+				}
 				res, err := analyzeOne(opts.Root, rel)
 				if err != nil {
 					once.Do(func() { firstErr = err })

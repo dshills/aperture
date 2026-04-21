@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -28,7 +29,7 @@ func buildMonorepoInputs(t *testing.T, rawTask, scopeIn string) buildInputs {
 	}
 	cfg := config.Default()
 	parsed := task.Parse(rawTask, task.ParseOptions{Source: "<inline>"})
-	res, err := pipeline.Build(pipeline.BuildOptions{
+	res, err := pipeline.Build(context.Background(), pipeline.BuildOptions{
 		Root:            fixture,
 		DefaultExcludes: config.DefaultExclusions(),
 	})
@@ -187,7 +188,7 @@ func TestScope_ZeroCandidatesAndNoSupplementalsExits9(t *testing.T) {
 	}
 	cfg := config.Default()
 	parsed := task.Parse("placeholder", task.ParseOptions{Source: "<inline>"})
-	res, err := pipeline.Build(pipeline.BuildOptions{
+	res, err := pipeline.Build(context.Background(), pipeline.BuildOptions{
 		Root:            root,
 		DefaultExcludes: config.DefaultExclusions(),
 	})

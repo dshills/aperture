@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"context"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -18,7 +19,7 @@ func TestBuild_SmallGoFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := Build(BuildOptions{
+	res, err := Build(context.Background(), BuildOptions{
 		Root:            root,
 		DefaultExcludes: config.DefaultExclusions(),
 	})
@@ -89,7 +90,7 @@ func TestBuild_NonGoFixtureProducesNoPanics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := Build(BuildOptions{Root: root, DefaultExcludes: config.DefaultExclusions()})
+	res, err := Build(context.Background(), BuildOptions{Root: root, DefaultExcludes: config.DefaultExclusions()})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 
@@ -69,7 +70,7 @@ type scopeFlagInputs struct {
 // TASK_FILE (may be nil for inline-only). inlineText is the -p value.
 // scopeFlag carries the CLI --scope state (value + whether-set), so the
 // function can apply the §7.4.5 CLI-vs-config override rules.
-func preparePlan(repoFlag string, taskArgs []string, inlineText, configFlag string, scopeFlag scopeFlagInputs) (commonInputs, error) {
+func preparePlan(ctx context.Context, repoFlag string, taskArgs []string, inlineText, configFlag string, scopeFlag scopeFlagInputs) (commonInputs, error) {
 	repoRoot, err := resolveRepoRoot(repoFlag)
 	if err != nil {
 		return commonInputs{}, exitErr(exitCodeBadRepo, err)
@@ -104,7 +105,7 @@ func preparePlan(repoFlag string, taskArgs []string, inlineText, configFlag stri
 		astCache.InvalidateAll("cache_schema_version mismatch")
 	}
 
-	res, err := pipeline.Build(pipeline.BuildOptions{
+	res, err := pipeline.Build(ctx, pipeline.BuildOptions{
 		Root:              repoRoot,
 		DefaultExcludes:   config.DefaultExclusions(),
 		UserExcludes:      userOnly(cfg),

@@ -60,7 +60,12 @@ type CacheStats struct {
 // Build walks the repo, parses Go files via the Go analyzer (go/parser)
 // concurrently, and assembles the deterministic Index. When opts.Cache is
 // non-nil, each file's cached analysis is reused instead of re-parsing.
-func Build(opts BuildOptions) (Result, error) {
+//
+// ctx is propagated to every language analyzer. Cancellation short-
+// circuits per-file analysis at the next ctx check; in-flight parses
+// already running to completion are not interrupted (go/parser is not
+// natively cancelable), but no new file will be picked up after cancel.
+func Build(ctx context.Context, opts BuildOptions) (Result, error) {
 	wr, err := repo.Walk(repo.WalkOptions{
 		Root:            opts.Root,
 		DefaultPatterns: opts.DefaultExcludes,
@@ -100,7 +105,7 @@ func Build(opts BuildOptions) (Result, error) {
 		cachedResults, toAnalyze, stats = lookupCachedFiles(opts.Cache, goPaths, fileByPath, goCacheVersion)
 	}
 
-	freshResults, err := goAnalyzer.Analyze(context.Background(), opts.Root, toAnalyze)
+	freshResults, err := goAnalyzer.Analyze(ctx, opts.Root, toAnalyze)
 	if err != nil {
 		return Result{}, fmt.Errorf("analyze: %w", err)
 	}
@@ -139,7 +144,10 @@ func Build(opts BuildOptions) (Result, error) {
 	// in parallel with the Go-analyze results already merged into
 	// idx.Files. §7.3.4 keys the cache the same way as Go, with a
 	// Language discriminator on the entry.
-	tier2Stats := runTier2Analysis(opts, idx, fileByPath)
+	tier2Stats, err := runTier2Analysis(ctx, opts, idx, fileByPath)
+	if err != nil {
+		return Result{}, fmt.Errorf("tier2 analyze: %w", err)
+	}
 	stats.Hits += tier2Stats.Hits
 	stats.Misses += tier2Stats.Misses
 	stats.Writes += tier2Stats.Writes

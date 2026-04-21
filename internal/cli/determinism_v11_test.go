@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"context"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -116,7 +117,7 @@ func TestDeterminism_ScopeRestrictedPlan_20Runs(t *testing.T) {
 	runOnce := func() []byte {
 		t.Helper()
 		parsed := task.Parse(taskText, task.ParseOptions{Source: "<inline>"})
-		res, err := pipeline.Build(pipeline.BuildOptions{
+		res, err := pipeline.Build(context.Background(), pipeline.BuildOptions{
 			Root:              fixture,
 			DefaultExcludes:   config.DefaultExclusions(),
 			TypeScriptEnabled: true,

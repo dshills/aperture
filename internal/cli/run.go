@@ -82,7 +82,7 @@ func runRun(ctx context.Context, args []string, f runFlags) error {
 		return usageErr("TASK_FILE and -p/--prompt are mutually exclusive")
 	}
 
-	prep, err := preparePlan(f.repo, taskArgs, f.inline, f.configPath, scopeFlagInputs{Value: f.scope, Set: f.scopeSet})
+	prep, err := preparePlan(ctx, f.repo, taskArgs, f.inline, f.configPath, scopeFlagInputs{Value: f.scope, Set: f.scopeSet})
 	if err != nil {
 		return err
 	}

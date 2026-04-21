@@ -67,8 +67,8 @@ func newPlanCommand() *cobra.Command {
 	return cmd
 }
 
-func runPlan(_ *cobra.Command, args []string, f planFlags) error {
-	prep, err := preparePlan(f.repo, args, f.inline, f.configPath, scopeFlagInputs{Value: f.scope, Set: f.scopeSet})
+func runPlan(cmd *cobra.Command, args []string, f planFlags) error {
+	prep, err := preparePlan(cmd.Context(), f.repo, args, f.inline, f.configPath, scopeFlagInputs{Value: f.scope, Set: f.scopeSet})
 	if err != nil {
 		return err
 	}

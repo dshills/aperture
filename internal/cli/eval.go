@@ -63,7 +63,7 @@ func newEvalRunCommand() *cobra.Command {
 		Use:   "run",
 		Short: "Run the fixture harness and exit 2 on regression",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runEvalRun(cmd.OutOrStdout(), f)
+			return runEvalRun(cmd.Context(), cmd.OutOrStdout(), f)
 		},
 	}
 	cmd.Flags().StringVar(&f.fixtures, "fixtures", "testdata/eval", "Path to fixtures directory")
@@ -74,7 +74,7 @@ func newEvalRunCommand() *cobra.Command {
 	return cmd
 }
 
-func runEvalRun(w io.Writer, f evalRunFlags) error {
+func runEvalRun(ctx context.Context, w io.Writer, f evalRunFlags) error {
 	absFixtures, err := filepath.Abs(f.fixtures)
 	if err != nil {
 		return exitErr(exitCodeBadArgs, fmt.Errorf("resolve --fixtures: %w", err))
@@ -92,7 +92,10 @@ func runEvalRun(w io.Writer, f evalRunFlags) error {
 	start := time.Now()
 	results := make([]eval.FixtureResult, 0, len(fixtures))
 	for _, fx := range fixtures {
-		res := runOneFixture(fx)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		res := runOneFixture(ctx, fx)
 		results = append(results, res)
 	}
 	elapsed := time.Since(start)
@@ -151,7 +154,7 @@ func newEvalBaselineCommand() *cobra.Command {
 		Use:   "baseline",
 		Short: "Regenerate baseline.json (reviewer-only)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runEvalBaseline(cmd.OutOrStdout(), f)
+			return runEvalBaseline(cmd.Context(), cmd.OutOrStdout(), f)
 		},
 	}
 	cmd.Flags().StringVar(&f.fixtures, "fixtures", "testdata/eval", "Path to fixtures directory")
@@ -161,7 +164,7 @@ func newEvalBaselineCommand() *cobra.Command {
 	return cmd
 }
 
-func runEvalBaseline(w io.Writer, f evalBaselineFlags) error {
+func runEvalBaseline(ctx context.Context, w io.Writer, f evalBaselineFlags) error {
 	absFixtures, err := filepath.Abs(f.fixtures)
 	if err != nil {
 		return exitErr(exitCodeBadArgs, fmt.Errorf("resolve --fixtures: %w", err))
@@ -179,7 +182,10 @@ func runEvalBaseline(w io.Writer, f evalBaselineFlags) error {
 	start := time.Now()
 	results := make([]eval.FixtureResult, 0, len(fixtures))
 	for _, fx := range fixtures {
-		results = append(results, runOneFixture(fx))
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		results = append(results, runOneFixture(ctx, fx))
 	}
 	elapsed := time.Since(start)
 
@@ -330,7 +336,7 @@ func runEvalRipgrep(w io.Writer, f evalRipgrepFlags) error {
 // runOneFixture executes the full planner pipeline for a single fixture
 // in-process and returns its scoring result. On any non-planner error,
 // result.Error is set and Metrics are zeroed.
-func runOneFixture(fx eval.Fixture) eval.FixtureResult {
+func runOneFixture(ctx context.Context, fx eval.Fixture) eval.FixtureResult {
 	res := eval.FixtureResult{Name: fx.Name}
 	repoDir := filepath.Join(fx.Dir, "repo")
 
@@ -357,7 +363,7 @@ func runOneFixture(fx eval.Fixture) eval.FixtureResult {
 	// Intentionally no cache: writing under repoDir would pollute the
 	// fixture tree and break the fixture fingerprint. Fixture runs are
 	// deterministic one-shots — the cache miss cost is acceptable.
-	pipeRes, err := pipeline.Build(pipeline.BuildOptions{
+	pipeRes, err := pipeline.Build(ctx, pipeline.BuildOptions{
 		Root:              repoDir,
 		DefaultExcludes:   config.DefaultExclusions(),
 		UserExcludes:      userOnly(cfg),

@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
@@ -24,7 +25,7 @@ func buildPolyglotInputs(t *testing.T, rawTask string) buildInputs {
 	}
 	cfg := config.Default()
 	parsed := task.Parse(rawTask, task.ParseOptions{Source: "<inline>"})
-	res, err := pipeline.Build(pipeline.BuildOptions{
+	res, err := pipeline.Build(context.Background(), pipeline.BuildOptions{
 		Root:              fixture,
 		DefaultExcludes:   config.DefaultExclusions(),
 		TypeScriptEnabled: true,
@@ -110,7 +111,7 @@ func TestTier2_DisabledFallsBackToTier3(t *testing.T) {
 		"Add a rate-limit header to resolver.ts. Update Resolver.resolveRateLimit and applyRateLimitHeader.",
 		task.ParseOptions{Source: "<inline>"},
 	)
-	res, err := pipeline.Build(pipeline.BuildOptions{
+	res, err := pipeline.Build(context.Background(), pipeline.BuildOptions{
 		Root:              fixture,
 		DefaultExcludes:   config.DefaultExclusions(),
 		TypeScriptEnabled: false, // the flag-off branch
@@ -150,7 +151,7 @@ func TestTier2_TestLinkingPairsJSTS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := pipeline.Build(pipeline.BuildOptions{
+	res, err := pipeline.Build(context.Background(), pipeline.BuildOptions{
 		Root:              fixture,
 		DefaultExcludes:   config.DefaultExclusions(),
 		TypeScriptEnabled: true,

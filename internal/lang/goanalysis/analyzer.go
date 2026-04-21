@@ -31,11 +31,12 @@ func (analyzerAdapter) AnalyzerVersion() string { return analyzerVersion }
 // order; the underlying Analyze sorts before returning (see
 // parse.go: "sort.Slice(results, ...)"), so no re-sort is needed here.
 //
-// ctx is accepted for interface compatibility; the underlying go/parser
-// path is not currently cancelable. Threading real cancellation through
-// analyzeOne is a follow-up.
-func (analyzerAdapter) Analyze(_ context.Context, root string, paths []string) ([]lang.FileResult, error) {
-	res, err := Analyze(AnalyzeOptions{Root: root, Paths: paths})
+// ctx is threaded through to the worker pool: each file's parse is
+// preceded by a ctx.Err() check, so cancel short-circuits the remaining
+// file set. A file that has already entered go/parser will run to
+// completion (go/parser is not natively cancelable).
+func (analyzerAdapter) Analyze(ctx context.Context, root string, paths []string) ([]lang.FileResult, error) {
+	res, err := Analyze(ctx, AnalyzeOptions{Root: root, Paths: paths})
 	if err != nil {
 		return nil, err
 	}

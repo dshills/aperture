@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -42,7 +43,7 @@ func newExplainCommand() *cobra.Command {
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			f.scopeSet = cmd.Flags().Changed("scope")
-			return runExplain(cmd.OutOrStdout(), args, f)
+			return runExplain(cmd.Context(), cmd.OutOrStdout(), args, f)
 		},
 	}
 	cmd.Flags().StringVar(&f.manifest, "manifest", "", "Path to a prior manifest JSON")
@@ -62,7 +63,7 @@ func newExplainCommand() *cobra.Command {
 // would defeat the purpose. Both code paths (loaded via --manifest and
 // rebuilt via explainViaPipeline) therefore unwrap the manifest and
 // render it; explainViaPipeline already strips exit 9 from BuildManifest.
-func runExplain(w io.Writer, args []string, f explainFlags) error {
+func runExplain(ctx context.Context, w io.Writer, args []string, f explainFlags) error {
 	var m *manifest.Manifest
 	if f.manifest != "" {
 		loaded, err := loadManifest(f.manifest)
@@ -71,7 +72,7 @@ func runExplain(w io.Writer, args []string, f explainFlags) error {
 		}
 		m = loaded
 	} else {
-		built, err := explainViaPipeline(args, f)
+		built, err := explainViaPipeline(ctx, args, f)
 		if err != nil {
 			return err
 		}
@@ -96,8 +97,8 @@ func loadManifest(path string) (*manifest.Manifest, error) {
 // but returns the manifest in memory without writing to disk. Threshold
 // gates are deliberately skipped — explain is a read-only lens. The
 // pipeline preparation itself is shared with runPlan via preparePlan.
-func explainViaPipeline(args []string, f explainFlags) (*manifest.Manifest, error) {
-	prep, err := preparePlan(f.repo, args, f.inline, f.configPath, scopeFlagInputs{Value: f.scope, Set: f.scopeSet})
+func explainViaPipeline(ctx context.Context, args []string, f explainFlags) (*manifest.Manifest, error) {
+	prep, err := preparePlan(ctx, f.repo, args, f.inline, f.configPath, scopeFlagInputs{Value: f.scope, Set: f.scopeSet})
 	if err != nil {
 		return nil, err
 	}
