@@ -5,6 +5,7 @@
 package pipeline
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"runtime"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/dshills/aperture/internal/cache"
 	"github.com/dshills/aperture/internal/index"
+	"github.com/dshills/aperture/internal/lang"
 	"github.com/dshills/aperture/internal/lang/goanalysis"
 	"github.com/dshills/aperture/internal/repo"
 )
@@ -24,9 +26,9 @@ type BuildOptions struct {
 	DefaultExcludes []string
 	UserExcludes    []string
 
-	// Cache, when non-nil, is consulted before invoking goanalysis for
-	// each Go file. Hits skip the AST parse and reuse the prior result;
-	// misses parse normally and write back to the cache.
+	// Cache, when non-nil, is consulted before invoking the Go analyzer
+	// for each Go file. Hits skip the AST parse and reuse the prior
+	// result; misses parse normally and write back to the cache.
 	Cache *cache.Cache
 
 	// TypeScriptEnabled / JavaScriptEnabled / PythonEnabled mirror the
@@ -55,9 +57,9 @@ type CacheStats struct {
 	Writes int
 }
 
-// Build walks the repo, parses Go files via go/parser concurrently, and
-// assembles the deterministic Index. When opts.Cache is non-nil, each
-// file's cached AST analysis is reused instead of re-parsing.
+// Build walks the repo, parses Go files via the Go analyzer (go/parser)
+// concurrently, and assembles the deterministic Index. When opts.Cache is
+// non-nil, each file's cached analysis is reused instead of re-parsing.
 func Build(opts BuildOptions) (Result, error) {
 	wr, err := repo.Walk(repo.WalkOptions{
 		Root:            opts.Root,
@@ -79,21 +81,26 @@ func Build(opts BuildOptions) (Result, error) {
 		fileByPath[idx.Files[i].Path] = &idx.Files[i]
 	}
 
-	goPaths := make([]string, 0, len(idx.Files))
-	for _, f := range idx.Files {
-		if f.Language == "go" {
-			goPaths = append(goPaths, f.Path)
-		}
-	}
+	// Route Go files to the Go analyzer. Tier-2 languages route through
+	// runTier2Analysis below; future languages will land as additional
+	// lang.Analyzer implementations iterated here.
+	goAnalyzer := goanalysis.NewAnalyzer()
+	goPaths := filesForAnalyzer(idx, goAnalyzer)
+	// cacheVersion namespaces cache entries by both the repo-wide
+	// SelectionLogicVersion and the per-analyzer AnalyzerVersion so a
+	// bump of either invalidates only its own entries. Bumping
+	// goanalysis.analyzerVersion invalidates Go cache entries without
+	// touching tier-2, and vice-versa.
+	goCacheVersion := cacheVersionFor(opts.Cache, goAnalyzer)
 
 	var stats CacheStats
 	toAnalyze := goPaths
-	cachedResults := map[string]goanalysis.FileResult{}
+	cachedResults := map[string]lang.FileResult{}
 	if opts.Cache != nil {
-		cachedResults, toAnalyze, stats = lookupCachedFiles(opts.Cache, goPaths, fileByPath)
+		cachedResults, toAnalyze, stats = lookupCachedFiles(opts.Cache, goPaths, fileByPath, goCacheVersion)
 	}
 
-	freshResults, err := goanalysis.Analyze(goanalysis.AnalyzeOptions{Root: opts.Root, Paths: toAnalyze})
+	freshResults, err := goAnalyzer.Analyze(context.Background(), opts.Root, toAnalyze)
 	if err != nil {
 		return Result{}, fmt.Errorf("analyze: %w", err)
 	}
@@ -104,12 +111,12 @@ func Build(opts BuildOptions) (Result, error) {
 	// the concurrent Analyze phase that produced them. Writes are
 	// independent per-file so a bounded worker pool scales cleanly.
 	if opts.Cache != nil {
-		written := writeCachedResults(opts.Cache, freshResults, fileByPath)
+		written := writeCachedResults(opts.Cache, freshResults, fileByPath, goCacheVersion)
 		stats.Writes += written
 	}
 
 	// Merge cached + fresh results by path.
-	byPath := make(map[string]goanalysis.FileResult, len(cachedResults)+len(freshResults))
+	byPath := make(map[string]lang.FileResult, len(cachedResults)+len(freshResults))
 	for p, r := range cachedResults {
 		byPath[p] = r
 	}
@@ -154,6 +161,34 @@ func Build(opts BuildOptions) (Result, error) {
 	return Result{Index: idx, Exclusions: wr.Exclusions, CacheStats: stats}, nil
 }
 
+// cacheVersionFor composes the SelectionLogicVersion and the analyzer's
+// AnalyzerVersion into the single string cache.Key hashes. Bumping
+// either invalidates only its own slice of the cache. Returns "" when
+// no cache is configured so call sites don't need a nil guard.
+func cacheVersionFor(c *cache.Cache, a lang.Analyzer) string {
+	if c == nil {
+		return ""
+	}
+	return c.SelectionLogicVersion + "|" + a.AnalyzerVersion()
+}
+
+// filesForAnalyzer returns the repo-relative paths whose walker-assigned
+// Language matches the analyzer's Name, preserving the walker's
+// ascending path order. The walker is authoritative on language
+// classification (it already applies extension, shebang, and filename
+// heuristics); routing by f.Language keeps the pipeline in lock-step
+// with that classification instead of re-deriving it from extensions.
+func filesForAnalyzer(idx *index.Index, a lang.Analyzer) []string {
+	name := a.Name()
+	out := make([]string, 0, len(idx.Files))
+	for _, f := range idx.Files {
+		if f.Language == name {
+			out = append(out, f.Path)
+		}
+	}
+	return out
+}
+
 // writeCachedResults writes miss results back to the cache in parallel
 // across a bounded worker pool. Each file's Put is independent, so
 // serialization behind fsync latency would have been pure overhead;
@@ -163,8 +198,9 @@ func Build(opts BuildOptions) (Result, error) {
 // warming the cache on the next run is a first-class fallback.
 func writeCachedResults(
 	c *cache.Cache,
-	freshResults []goanalysis.FileResult,
+	freshResults []lang.FileResult,
 	fileByPath map[string]*index.FileEntry,
+	cacheVersion string,
 ) int {
 	workers := runtime.NumCPU()
 	if workers < 1 {
@@ -182,7 +218,7 @@ func writeCachedResults(
 	// pre-fill path allocated a 50 000-entry chan on the heap even
 	// though workers drain it in pipeline order; this shape caps the
 	// allocation regardless of fixture size.
-	jobs := make(chan goanalysis.FileResult, 256)
+	jobs := make(chan lang.FileResult, 256)
 	go func() {
 		defer close(jobs)
 		for _, r := range freshResults {
@@ -203,7 +239,7 @@ func writeCachedResults(
 				if entry == nil {
 					continue
 				}
-				key := cache.Key(r.Path, entry.Size, entry.MTime, c.SelectionLogicVersion)
+				key := cache.Key(r.Path, entry.Size, entry.MTime, cacheVersion)
 				ce := &cache.Entry{
 					Path:        r.Path,
 					Size:        entry.Size,
@@ -236,10 +272,11 @@ func lookupCachedFiles(
 	c *cache.Cache,
 	goPaths []string,
 	fileByPath map[string]*index.FileEntry,
-) (map[string]goanalysis.FileResult, []string, CacheStats) {
+	cacheVersion string,
+) (map[string]lang.FileResult, []string, CacheStats) {
 	type resultRow struct {
 		path string
-		res  goanalysis.FileResult
+		res  lang.FileResult
 		hit  bool
 	}
 
@@ -283,7 +320,7 @@ func lookupCachedFiles(
 					out <- resultRow{path: p, hit: false}
 					continue
 				}
-				key := cache.Key(p, entry.Size, entry.MTime, c.SelectionLogicVersion)
+				key := cache.Key(p, entry.Size, entry.MTime, cacheVersion)
 				ce, err := c.Get(key)
 				if err != nil || ce == nil {
 					out <- resultRow{path: p, hit: false}
@@ -296,7 +333,7 @@ func lookupCachedFiles(
 				out <- resultRow{
 					path: p,
 					hit:  true,
-					res: goanalysis.FileResult{
+					res: lang.FileResult{
 						Path:        ce.Path,
 						PackageName: ce.PackageName,
 						Imports:     ce.Imports,
@@ -313,7 +350,7 @@ func lookupCachedFiles(
 		close(out)
 	}()
 
-	hits := make(map[string]goanalysis.FileResult, len(goPaths))
+	hits := make(map[string]lang.FileResult, len(goPaths))
 	misses := make([]string, 0, len(goPaths))
 	var stats CacheStats
 	for row := range out {
@@ -327,9 +364,9 @@ func lookupCachedFiles(
 	}
 	// Preserve deterministic miss ordering (the walker handed us sorted
 	// paths; concurrent drain breaks it). sort.Strings is O(N log N);
-	// goanalysis.Analyze re-sorts internally but restoring order here
-	// keeps any observable side-effects of miss-list iteration stable
-	// across runs.
+	// the analyzer re-sorts internally but restoring order here keeps
+	// any observable side-effects of miss-list iteration stable across
+	// runs.
 	sort.Strings(misses)
 	return hits, misses, stats
 }
