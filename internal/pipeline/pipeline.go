@@ -17,6 +17,9 @@ import (
 	"github.com/dshills/aperture/internal/index"
 	"github.com/dshills/aperture/internal/lang"
 	"github.com/dshills/aperture/internal/lang/goanalysis"
+	"github.com/dshills/aperture/internal/lang/javascript"
+	"github.com/dshills/aperture/internal/lang/python"
+	"github.com/dshills/aperture/internal/lang/typescript"
 	"github.com/dshills/aperture/internal/repo"
 )
 
@@ -86,73 +89,102 @@ func Build(ctx context.Context, opts BuildOptions) (Result, error) {
 		fileByPath[idx.Files[i].Path] = &idx.Files[i]
 	}
 
-	// Route Go files to the Go analyzer. Tier-2 languages route through
-	// runTier2Analysis below; future languages will land as additional
-	// lang.Analyzer implementations iterated here.
-	goAnalyzer := goanalysis.NewAnalyzer()
-	goPaths := filesForAnalyzer(idx, goAnalyzer)
-	// cacheVersion namespaces cache entries by both the repo-wide
-	// SelectionLogicVersion and the per-analyzer AnalyzerVersion so a
-	// bump of either invalidates only its own entries. Bumping
-	// goanalysis.analyzerVersion invalidates Go cache entries without
-	// touching tier-2, and vice-versa.
-	goCacheVersion := cacheVersionFor(opts.Cache, goAnalyzer)
+	// Assemble the analyzer registry. Go is always present (tier-1);
+	// tier-2 analyzers opt in per the v1.1 §9 `languages.<name>.enabled`
+	// config flags. Disabled languages skip analysis and land at
+	// tier3_lexical via the LanguageTier stamping below. Order is
+	// deterministic by construction (ascending Name) so cache hit/miss
+	// telemetry and any downstream logs are stable across runs.
+	analyzers := []lang.Analyzer{goanalysis.NewAnalyzer()}
+	if opts.JavaScriptEnabled {
+		analyzers = append(analyzers, javascript.NewAnalyzer())
+	}
+	if opts.PythonEnabled {
+		analyzers = append(analyzers, python.NewAnalyzer())
+	}
+	if opts.TypeScriptEnabled {
+		analyzers = append(analyzers, typescript.NewAnalyzer())
+	}
 
+	// One unified pass per analyzer: route files by walker Language,
+	// consult cache, parse misses, write back, merge into Index. Cache
+	// entries are namespaced by SelectionLogicVersion + AnalyzerVersion
+	// via cacheVersionFor so a bump of either invalidates only its own
+	// slice of the cache.
 	var stats CacheStats
-	toAnalyze := goPaths
-	cachedResults := map[string]lang.FileResult{}
-	if opts.Cache != nil {
-		cachedResults, toAnalyze, stats = lookupCachedFiles(opts.Cache, goPaths, fileByPath, goCacheVersion)
-	}
-
-	freshResults, err := goAnalyzer.Analyze(ctx, opts.Root, toAnalyze)
-	if err != nil {
-		return Result{}, fmt.Errorf("analyze: %w", err)
-	}
-
-	// Write miss results back to the cache concurrently. The miss list
-	// typically runs hundreds or thousands of entries on a cold repo;
-	// serializing them behind fsync latency would negate the benefit of
-	// the concurrent Analyze phase that produced them. Writes are
-	// independent per-file so a bounded worker pool scales cleanly.
-	if opts.Cache != nil {
-		written := writeCachedResults(opts.Cache, freshResults, fileByPath, goCacheVersion)
-		stats.Writes += written
-	}
-
-	// Merge cached + fresh results by path.
-	byPath := make(map[string]lang.FileResult, len(cachedResults)+len(freshResults))
-	for p, r := range cachedResults {
-		byPath[p] = r
-	}
-	for _, r := range freshResults {
-		byPath[r.Path] = r
-	}
-	for i := range idx.Files {
-		r, ok := byPath[idx.Files[i].Path]
-		if !ok {
+	for _, a := range analyzers {
+		paths := filesForAnalyzer(idx, a)
+		if len(paths) == 0 {
 			continue
 		}
-		idx.Files[i].PackageName = r.PackageName
-		idx.Files[i].Imports = r.Imports
-		idx.Files[i].Symbols = r.Symbols
-		idx.Files[i].SideEffects = r.SideEffects
-		idx.Files[i].ParseError = r.ParseError
-	}
+		cacheVersion := cacheVersionFor(opts.Cache, a)
 
-	// v1.1 tier-2: analyze TS/JS/Python files via tree-sitter. Runs
-	// in parallel with the Go-analyze results already merged into
-	// idx.Files. §7.3.4 keys the cache the same way as Go, with a
-	// Language discriminator on the entry.
-	tier2Stats, err := runTier2Analysis(ctx, opts, idx, fileByPath)
-	if err != nil {
-		return Result{}, fmt.Errorf("tier2 analyze: %w", err)
+		toAnalyze := paths
+		cachedResults := map[string]lang.FileResult{}
+		if opts.Cache != nil {
+			var s CacheStats
+			cachedResults, toAnalyze, s = lookupCachedFiles(opts.Cache, paths, fileByPath, cacheVersion)
+			stats.Hits += s.Hits
+			stats.Misses += s.Misses
+		}
+
+		freshResults, err := a.Analyze(ctx, opts.Root, toAnalyze)
+		if err != nil {
+			return Result{}, fmt.Errorf("analyze %s: %w", a.Name(), err)
+		}
+
+		if opts.Cache != nil {
+			stats.Writes += writeCachedResults(opts.Cache, freshResults, fileByPath, cacheVersion)
+		}
+
+		// Merge cached + fresh results into the Index.
+		//
+		// SET (not APPEND) is the correct semantic here, by invariant:
+		// the walker assigns exactly one Language tag per file, and
+		// filesForAnalyzer(idx, a) routes each file to exactly one
+		// analyzer whose Name() matches that tag. Analyzer domains do
+		// not overlap, so a given path is seen by at most one analyzer
+		// per Build — there is no prior value on f.Symbols/f.Imports
+		// to preserve via APPEND. If two analyzers ever claimed the
+		// same Name(), registry-assembly above would be the bug; the
+		// merge would correctly overwrite and the second analyzer's
+		// results would win, not silently concatenate and produce
+		// duplicate Symbols. Fields the analyzer doesn't populate
+		// (PackageName / SideEffects on tier-2) stay zero-valued.
+		//
+		// r is a lang.FileResult VALUE (see the Analyze interface:
+		// `Analyze(...) ([]FileResult, error)` — slice of struct
+		// values, not pointers). There is no nil r to guard against.
+		//
+		// Iterate results rather than idx.Files: with L analyzers
+		// the old shape was O(L·N). Now O(analyzer's file count).
+		mergeResult := func(r lang.FileResult) {
+			f, ok := fileByPath[r.Path]
+			if !ok {
+				return
+			}
+			f.PackageName = r.PackageName
+			f.Imports = r.Imports
+			f.Symbols = r.Symbols
+			f.SideEffects = r.SideEffects
+			f.ParseError = r.ParseError
+		}
+		for _, r := range cachedResults {
+			mergeResult(r)
+		}
+		for _, r := range freshResults {
+			mergeResult(r)
+		}
 	}
-	stats.Hits += tier2Stats.Hits
-	stats.Misses += tier2Stats.Misses
-	stats.Writes += tier2Stats.Writes
 
 	// v1.1 §5.4: stamp every FileEntry with its LanguageTier.
+	// ResolveTierForLanguage owns the conditional logic — Go returns
+	// Tier1Deep unconditionally, TS/JS/Python return Tier2Structural
+	// ONLY when their respective *Enabled flag is true (otherwise
+	// Tier3Lexical), and every other language returns Tier3Lexical.
+	// The loop is therefore correct for disabled languages and for
+	// languages without any analyzer; it is NOT unconditionally
+	// stamping Tier2Structural.
 	for i := range idx.Files {
 		idx.Files[i].LanguageTier = string(index.ResolveTierForLanguage(
 			idx.Files[i].Language,
